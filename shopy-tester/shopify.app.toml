@@ -28,4 +28,6 @@ redirect_urls = [
 ]
 
 [build]
-automatically_update_urls_on_dev = true
+# Keep `shopify app dev` from overwriting the production (Railway) App URL with a
+# temporary Cloudflare tunnel. Re-enable only if you want dev to manage URLs.
+automatically_update_urls_on_dev = false
