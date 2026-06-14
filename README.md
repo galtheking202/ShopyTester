@@ -84,12 +84,29 @@ Dockerfile clones MiroFish at a pinned commit and overlays these files.
 - Env vars:
   - `DATABASE_URL=${{Postgres.DATABASE_URL}}`
   - `BACKEND_URL` = the backend service URL from step 1
+  - `BACKEND_SECRET` = the **same** value you set on the backend (see below)
   - `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET` — from your Partner app
   - `SHOPIFY_APP_URL` = this service's Railway URL
   - `SCOPES` = `read_products,write_products,read_content,write_content,read_themes,write_themes,read_online_store_pages,read_online_store_navigation`
 - Set the same URL as `application_url` in `shopy-tester/shopify.app.toml`, then
   run `shopify app deploy` (pushes scopes/URLs/webhooks to Shopify so merchants
   can install).
+
+### Secure the backend (do this before exposing it)
+
+The backend's `/run` and `/suggest` spend Gemini money, so don't leave it open.
+Set a **shared secret** on both services:
+
+```
+openssl rand -hex 32      # generate once
+```
+- Set `BACKEND_SECRET=<that value>` on **both** `mirofish_worker` and `shopy-tester`.
+- When set, the backend requires an `X-ShopSim-Auth: <secret>` header on every
+  protected route (`/run`, `/suggest`, `/status`, `/result`); `/health` stays
+  open for Railway's healthcheck. The Shopify app sends the header automatically.
+
+(Alternatively, keep the backend off the public internet via Railway private
+networking and skip the secret — but the secret is the simpler, safe default.)
 
 ---
 
@@ -133,6 +150,7 @@ Scopes (`shopify.app.toml`):
 | `shopy-tester` | `DATABASE_URL` | Postgres connection |
 | `shopy-tester` | `BACKEND_URL` | Backend base URL (Railway) |
 | `shopy-tester` | `SHOPIFY_API_KEY/SECRET`, `SHOPIFY_APP_URL`, `SCOPES` | Shopify app |
+| both | `BACKEND_SECRET` | Shared secret guarding the backend (same value on both) |
 | `mirofish_worker` | `GEMINI_API_KEY` | Gemini key (MiroFish + `/suggest`) |
 | `mirofish_worker` | `GEMINI_MODEL` | Default `gemini-2.5-flash` |
 | `mirofish_worker` | `LLM_PROVIDER` | `gemini-api` (this fork) |

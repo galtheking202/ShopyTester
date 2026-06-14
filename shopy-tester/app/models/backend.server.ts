@@ -25,10 +25,18 @@ export interface MirofishResult {
   svgs: { name: string; dataUri: string }[];
 }
 
+// Shared secret sent to the backend (must match its BACKEND_SECRET). Lets the
+// backend stay private/unauthenticated-to-the-world while only the app can call it.
+const SECRET = process.env.BACKEND_SECRET || "";
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    headers: {
+      "Content-Type": "application/json",
+      ...(SECRET ? { "X-ShopSim-Auth": SECRET } : {}),
+      ...(init?.headers ?? {}),
+    },
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");

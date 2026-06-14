@@ -6,12 +6,14 @@ mirofish CLI is a long-running subprocess.
 """
 from __future__ import annotations
 
+import hmac
 import json
+import os
 import threading
 import uuid
 from pathlib import Path
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 # Load mirofish_worker/.env before Settings reads its defaults.
@@ -27,6 +29,22 @@ from suggest import suggest_variant  # noqa: E402
 
 app = FastAPI(title="mirofish_worker")
 settings = Settings()
+
+# Shared-secret guard. When BACKEND_SECRET is set, every protected route requires
+# a matching `X-ShopSim-Auth` header (the Shopify app sends it). When unset (e.g.
+# local dev), the guard is a no-op. /health is always open for healthchecks.
+BACKEND_SECRET = os.getenv("BACKEND_SECRET", "")
+
+
+def require_secret(x_shopsim_auth: str | None = Header(default=None)) -> None:
+    if not BACKEND_SECRET:
+        return
+    if not x_shopsim_auth or not hmac.compare_digest(x_shopsim_auth, BACKEND_SECRET):
+        raise HTTPException(status_code=401, detail="unauthorized")
+
+
+# Applied to every non-public route.
+guard = [Depends(require_secret)]
 
 # Thread-safe in-memory job table. Results are also written to disk so they
 # survive a worker restart.
@@ -88,7 +106,7 @@ def health() -> dict:
     return {"ok": True, "mock": settings.mock, "provider": settings.provider}
 
 
-@app.post("/run")
+@app.post("/run", dependencies=guard)
 def run(req: RunRequest, background: BackgroundTasks) -> dict:
     job_id = uuid.uuid4().hex
     _set(job_id, status="running")
@@ -96,7 +114,7 @@ def run(req: RunRequest, background: BackgroundTasks) -> dict:
     return {"jobId": job_id, "status": "running"}
 
 
-@app.post("/suggest")
+@app.post("/suggest", dependencies=guard)
 def suggest(req: SuggestRequest) -> dict:
     try:
         suggestion = suggest_variant(req.componentType, req.title, req.baseline)
@@ -105,7 +123,7 @@ def suggest(req: SuggestRequest) -> dict:
         raise HTTPException(status_code=400, detail=str(err)[:500])
 
 
-@app.get("/status/{job_id}")
+@app.get("/status/{job_id}", dependencies=guard)
 def status(job_id: str) -> dict:
     job = _get(job_id)
     if not job:
@@ -113,7 +131,7 @@ def status(job_id: str) -> dict:
     return {"status": job["status"], "error": job.get("error")}
 
 
-@app.get("/result/{job_id}")
+@app.get("/result/{job_id}", dependencies=guard)
 def result(job_id: str) -> dict:
     job = _get(job_id)
     if not job:
@@ -124,7 +142,6 @@ def result(job_id: str) -> dict:
 
 
 if __name__ == "__main__":
-    import os
     import uvicorn
 
     uvicorn.run(
