@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { redirect } from "react-router";
 import type {
   ActionFunctionArgs,
@@ -87,15 +87,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     for (const f of fields) out[f.key] = String(form.get(`${prefix}_${f.key}`) ?? "");
     return out;
   };
-  const exp = await createAndLaunchExperiment({
-    shop: session.shop,
-    snapshotId: String(form.get("snapshotId")),
-    componentId,
-    name: String(form.get("name") || `${component.title} test`),
-    variantA: readFields("a"),
-    variantB: readFields("b"),
-  });
-  throw redirect(`/app/experiments/${exp.id}`);
+  try {
+    const exp = await createAndLaunchExperiment({
+      shop: session.shop,
+      snapshotId: String(form.get("snapshotId")),
+      componentId,
+      name: String(form.get("name") || `${component.title} test`),
+      variantA: readFields("a"),
+      variantB: readFields("b"),
+    });
+    return redirect(`/app/experiments/${exp.id}`);
+  } catch (err) {
+    // Most likely the backend (BACKEND_URL) is unreachable or rejected the call.
+    return { launchError: err instanceof Error ? err.message : String(err) };
+  }
 };
 
 export default function NewExperiment() {
@@ -175,10 +180,12 @@ function VariantEditor({
     }
   }, [suggestFetcher.data]);
 
-  const launch = (e: any) => {
-    const formEl = (e.currentTarget as HTMLElement).closest("form");
-    if (formEl) launchFetcher.submit(formEl, { method: "post" });
+  const formRef = useRef<HTMLFormElement>(null);
+  const launch = () => {
+    if (formRef.current) launchFetcher.submit(formRef.current, { method: "post" });
   };
+  const launchError = (launchFetcher.data as { launchError?: string } | undefined)
+    ?.launchError;
 
   const fieldValueB = (key: string) => suggestion?.[key] ?? selected.baseline[key] ?? "";
 
@@ -205,7 +212,7 @@ function VariantEditor({
             </s-banner>
           )}
 
-          <form>
+          <form ref={formRef}>
             <input type="hidden" name="intent" value="launch" />
             <input type="hidden" name="componentId" value={selected.id} />
             <input type="hidden" name="snapshotId" value={snapshotId} />
@@ -242,6 +249,11 @@ function VariantEditor({
       </s-section>
 
       <s-section>
+        {launchError && (
+          <s-banner tone="critical" heading="Could not start simulation">
+            {launchError}
+          </s-banner>
+        )}
         <s-button
           variant="primary"
           {...(launchFetcher.state !== "idle" ? { loading: true } : {})}
