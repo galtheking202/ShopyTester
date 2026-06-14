@@ -152,9 +152,13 @@ class LLMClient:
         want_json = bool(response_format and response_format.get("type") == "json_object")
         config = types.GenerateContentConfig(
             temperature=temperature,
-            max_output_tokens=max_tokens,
+            # Headroom so large JSON (e.g. ontology) isn't truncated.
+            max_output_tokens=max(max_tokens, 8192),
             system_instruction=system_text or None,
             response_mime_type="application/json" if want_json else None,
+            # Gemini 2.5 spends output tokens "thinking" before answering, which
+            # truncates the JSON. Disable it so the budget goes to the answer.
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
         )
 
         try:

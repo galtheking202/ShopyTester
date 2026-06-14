@@ -42,8 +42,10 @@ def suggest_variant(
         contents=prompt,
         config=types.GenerateContentConfig(
             temperature=0.8,
-            max_output_tokens=1500,
+            max_output_tokens=2048,
             response_mime_type="application/json",
+            # Disable Gemini 2.5 "thinking" so the JSON answer isn't truncated.
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
         ),
     )
     text = resp.text or ""
