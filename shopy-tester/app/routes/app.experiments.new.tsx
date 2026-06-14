@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { redirect } from "react-router";
 import type {
   ActionFunctionArgs,
@@ -180,89 +180,91 @@ function VariantEditor({
     }
   }, [suggestFetcher.data]);
 
-  const formRef = useRef<HTMLFormElement>(null);
-  const launch = () => {
-    if (formRef.current) launchFetcher.submit(formRef.current, { method: "post" });
-  };
+  const launching = launchFetcher.state !== "idle";
   const launchError = (launchFetcher.data as { launchError?: string } | undefined)
     ?.launchError;
 
   const fieldValueB = (key: string) => suggestion?.[key] ?? selected.baseline[key] ?? "";
 
   return (
-    <>
-      <s-section heading="2. Define variants">
-        <s-stack direction="block" gap="base">
-          <s-badge>{TYPE_LABELS[selected.type]}</s-badge>
+    <s-section heading="2. Define variants">
+      <s-stack direction="block" gap="base">
+        <s-badge>{TYPE_LABELS[selected.type]}</s-badge>
 
-          <s-button
-            {...(suggestFetcher.state !== "idle" ? { loading: true } : {})}
-            onClick={() =>
-              suggestFetcher.submit(
-                { intent: "suggest", componentId: selected.id },
-                { method: "post" },
-              )
-            }
-          >
-            Suggest Variant B with AI
-          </s-button>
-          {suggestFetcher.data?.error && (
-            <s-banner tone="critical" heading="Could not generate a suggestion">
-              {suggestFetcher.data.error}
-            </s-banner>
-          )}
-
-          <form ref={formRef}>
-            <input type="hidden" name="intent" value="launch" />
-            <input type="hidden" name="componentId" value={selected.id} />
-            <input type="hidden" name="snapshotId" value={snapshotId} />
-            <s-stack direction="block" gap="base">
-              <s-text-field
-                label="Experiment name"
-                name="name"
-                defaultValue={`${selected.title} test`}
-              />
-              {selected.fields.map((f) => (
-                <s-stack key={f.key} direction="inline" gap="base">
-                  <s-box inlineSize="50%">
-                    <Field
-                      label={`Variant A · ${f.label}`}
-                      name={`a_${f.key}`}
-                      defaultValue={selected.baseline[f.key] ?? ""}
-                      multiline={f.multiline}
-                    />
-                  </s-box>
-                  <s-box inlineSize="50%">
-                    <Field
-                      key={`b-${f.key}-${nonce}`}
-                      label={`Variant B · ${f.label}`}
-                      name={`b_${f.key}`}
-                      defaultValue={fieldValueB(f.key)}
-                      multiline={f.multiline}
-                    />
-                  </s-box>
-                </s-stack>
-              ))}
-            </s-stack>
-          </form>
-        </s-stack>
-      </s-section>
-
-      <s-section>
-        {launchError && (
-          <s-banner tone="critical" heading="Could not start simulation">
-            {launchError}
+        <s-button
+          {...(suggestFetcher.state !== "idle" ? { loading: true } : {})}
+          onClick={() =>
+            suggestFetcher.submit(
+              { intent: "suggest", componentId: selected.id },
+              { method: "post" },
+            )
+          }
+        >
+          Suggest Variant B with AI
+        </s-button>
+        {suggestFetcher.data?.error && (
+          <s-banner tone="critical" heading="Could not generate a suggestion">
+            {suggestFetcher.data.error}
           </s-banner>
         )}
-        <s-button
-          variant="primary"
-          {...(launchFetcher.state !== "idle" ? { loading: true } : {})}
-          onClick={launch}
-        >
-          Run simulation
-        </s-button>
-      </s-section>
-    </>
+
+        {/* Native Form + submit button: the most reliable submit path. */}
+        <launchFetcher.Form method="post">
+          <input type="hidden" name="intent" value="launch" />
+          <input type="hidden" name="componentId" value={selected.id} />
+          <input type="hidden" name="snapshotId" value={snapshotId} />
+          <s-stack direction="block" gap="base">
+            <s-text-field
+              label="Experiment name"
+              name="name"
+              defaultValue={`${selected.title} test`}
+            />
+            {selected.fields.map((f) => (
+              <s-stack key={f.key} direction="inline" gap="base">
+                <s-box inlineSize="50%">
+                  <Field
+                    label={`Variant A · ${f.label}`}
+                    name={`a_${f.key}`}
+                    defaultValue={selected.baseline[f.key] ?? ""}
+                    multiline={f.multiline}
+                  />
+                </s-box>
+                <s-box inlineSize="50%">
+                  <Field
+                    key={`b-${f.key}-${nonce}`}
+                    label={`Variant B · ${f.label}`}
+                    name={`b_${f.key}`}
+                    defaultValue={fieldValueB(f.key)}
+                    multiline={f.multiline}
+                  />
+                </s-box>
+              </s-stack>
+            ))}
+            {launchError && (
+              <s-banner tone="critical" heading="Could not start simulation">
+                {launchError}
+              </s-banner>
+            )}
+            <button
+              type="submit"
+              disabled={launching}
+              style={{
+                padding: "10px 18px",
+                background: launching ? "#a0c4b8" : "#008060",
+                color: "white",
+                border: "none",
+                borderRadius: 8,
+                fontSize: 14,
+                cursor: launching ? "default" : "pointer",
+                width: "fit-content",
+              }}
+            >
+              {launching ? "Starting…" : "Run simulation"}
+            </button>
+          </s-stack>
+        </launchFetcher.Form>
+      </s-stack>
+    </s-section>
   );
 }
 
