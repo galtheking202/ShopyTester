@@ -1,0 +1,104 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+// A point-in-time ingestion of a store, decomposed into components.
+model ShopSnapshot {
+  id          String       @id @default(cuid())
+  shop        String
+  createdAt   DateTime     @default(now())
+  components  Component[]
+  experiments Experiment[]
+
+  @@index([shop])
+}
+
+// One ingested unit of the store (product, collection, menu, page, policy,
+// brand, or homepage section).
+model Component {
+  id          String       @id @default(cuid())
+  snapshot    ShopSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  snapshotId  String
+  type        String // product | collection | menu | page | policy | brand | homepage_section
+  externalId  String? // Shopify GID or handle, used for write-back
+  handle      String?
+  title       String
+  data        Json // normalized fields used for serialization + apply
+  markdown    String // canonical markdown serialization (seed material)
+  experiments Experiment[]
+
+  @@index([snapshotId])
+  @@index([type])
+}
+
+// A single per-component predictive A/B test.
+model Experiment {
+  id             String       @id @default(cuid())
+  shop           String
+  snapshot       ShopSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  snapshotId     String
+  component      Component    @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  componentId    String
+  componentType  String
+  name           String
+  requirement    String // natural-language objective sent to MiroFish
+  status         String       @default("draft") // draft|running|completed|failed|applied
+  jobId          String? // backend job id
+  winner         String? // "A" | "B"
+  confidence     Float?
+  scoreA         Float?
+  scoreB         Float?
+  reportMarkdown String?
+  svgs           Json? // list of { name, dataUri }
+  error          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  variants       Variant[]
+
+  @@index([shop])
+  @@index([status])
+}
+
+// Variant A (baseline / current) or B (candidate) of the component under test.
+model Variant {
+  id           String     @id @default(cuid())
+  experiment   Experiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  experimentId String
+  label        String // "A" | "B"
+  isBaseline   Boolean    @default(false)
+  data         Json // overridden component fields (e.g. { title, descriptionHtml })
+  markdown     String // serialized variant, fed to MiroFish
+
+  @@index([experimentId])
+}

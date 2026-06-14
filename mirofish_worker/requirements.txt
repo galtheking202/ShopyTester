@@ -1,0 +1,11 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+python-dotenv>=1.0
+# Variant generation (the /suggest endpoint) via the Gemini API.
+google-genai>=1.0
+# MiroFish CLI (provides the `mirofish` command). Install separately if this
+# pin is unavailable on PyPI in your environment:
+#   uv tool install mirofish        (recommended)
+#   pipx install mirofish
+# The worker invokes `mirofish` as a subprocess, so it only needs to be on PATH.

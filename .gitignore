@@ -1,0 +1,36 @@
+# Node
+node_modules/
+web/build/
+web/.cache/
+web/dev.sqlite
+web/dev.sqlite-journal
+web/.env
+.env
+
+# Shopify
+web/.shopify/
+extensions/*/dist/
+
+# MiroFish CLI clone (large; rebuild with `git clone` + `uv sync`)
+mirofish-cli/
+mirofish_worker/_smoke_run/
+
+# Python worker
+mirofish_worker/.venv/
+mirofish_worker/__pycache__/
+mirofish_worker/**/__pycache__/
+mirofish_worker/runs/
+mirofish_worker/jobs.sqlite
+mirofish_worker/.env
+
+# OS / editor
+.DS_Store
+*.log
+
+# Separate / superseded projects not part of the deploy
+MiroFish/
+web/
+
+# Editor / AI tool dirs
+**/.cursor/
+**/.gemini/

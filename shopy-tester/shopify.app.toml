@@ -1,0 +1,28 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "885e7354be14689526ddec777778863f"
+application_url = "https://example.com"
+embedded = true
+name = "ShopyTester"
+
+[access_scopes]
+# Scopes needed to ingest the whole shop and write winning variants back.
+scopes = "read_products,write_products,read_content,write_content,read_themes,write_themes,read_online_store_pages,read_online_store_navigation"
+
+[webhooks]
+api_version = "2026-07"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+[auth]
+redirect_urls = [ "https://example.com/api/auth" ]
+
+[build]
+include_config_on_deploy = true
+automatically_update_urls_on_dev = true
