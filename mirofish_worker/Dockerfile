@@ -52,4 +52,6 @@ ENV MIROFISH_BIN=/opt/mirofish-cli/.venv/bin/mirofish \
     PORT=8800
 
 EXPOSE 8800
-CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT:-8800}"]
+# Bind IPv6 (::) so the service is reachable over Railway private networking.
+# On Linux this is dual-stack, so public access still works too.
+CMD ["sh", "-c", "uvicorn app:app --host :: --port ${PORT:-8800}"]
