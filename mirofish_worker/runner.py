@@ -121,10 +121,14 @@ def _run_mirofish(
         str(out_dir),
         "--json",
     ]
+    # Capture stdout (the --json machine output) but let stderr stream straight to
+    # the worker's stderr -> Railway logs, so MiroFish/OASIS progress is visible
+    # live (where it's at: ontology, graph, simulation rounds, etc.).
     try:
         proc = subprocess.run(
             cmd,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=None,
             text=True,
             timeout=settings.timeout,
             env={**os.environ, "LLM_PROVIDER": settings.provider},
@@ -132,12 +136,12 @@ def _run_mirofish(
     except subprocess.TimeoutExpired:
         raise RuntimeError(
             f"MiroFish timed out after {settings.timeout}s. Lower MIROFISH_MAX_ROUNDS "
-            f"and/or MIROFISH_PERSONAS, or raise MIROFISH_TIMEOUT. (Often caused by "
-            f"Gemini rate limits throttling the many calls a run makes.)"
+            f"and/or MIROFISH_PERSONAS, or raise MIROFISH_TIMEOUT. See backend logs for "
+            f"the stage it was stuck on."
         )
     if proc.returncode != 0:
         raise RuntimeError(
-            f"mirofish exited {proc.returncode}: {proc.stderr[-500:] or proc.stdout[-500:]}"
+            f"mirofish exited {proc.returncode} (see backend logs): {(proc.stdout or '')[-500:]}"
         )
     verdict_path = _find(out_dir, "verdict.json")
     verdict = None
