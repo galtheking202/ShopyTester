@@ -46,6 +46,9 @@ def suggest_variant(
             response_mime_type="application/json",
             # Disable Gemini 2.5 "thinking" so the JSON answer isn't truncated.
             thinking_config=types.ThinkingConfig(thinking_budget=0),
+            http_options=types.HttpOptions(
+                timeout=int(os.getenv("GEMINI_TIMEOUT_MS", "120000"))
+            ),
         ),
     )
     text = resp.text or ""

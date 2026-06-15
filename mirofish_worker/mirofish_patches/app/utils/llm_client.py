@@ -159,6 +159,11 @@ class LLMClient:
             # Gemini 2.5 spends output tokens "thinking" before answering, which
             # truncates the JSON. Disable it so the budget goes to the answer.
             thinking_config=types.ThinkingConfig(thinking_budget=0),
+            # Per-request timeout (ms). Without this a hung call blocks the whole
+            # OASIS round indefinitely; with it the call fails and the retry runs.
+            http_options=types.HttpOptions(
+                timeout=int(os.getenv("GEMINI_TIMEOUT_MS", "120000"))
+            ),
         )
 
         try:
