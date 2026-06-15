@@ -53,10 +53,30 @@ export function startRun(
   return call("/run", { method: "POST", body: JSON.stringify(payload) });
 }
 
-export function getStatus(
+export async function getStatus(
   jobId: string,
 ): Promise<{ status: "running" | "completed" | "failed"; error?: string }> {
-  return call(`/status/${jobId}`);
+  const res = await fetch(`${BASE}/status/${jobId}`, {
+    headers: { ...(SECRET ? { "X-ShopSim-Auth": SECRET } : {}) },
+  });
+  // The in-memory job is gone (backend restarted mid-run, or job never existed).
+  // Treat as failed so the experiment stops polling instead of 404-looping forever.
+  if (res.status === 404) {
+    return {
+      status: "failed",
+      error:
+        "The simulation was lost (the backend restarted mid-run). Re-run the experiment, " +
+        "and avoid changing backend settings while a run is in progress.",
+    };
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`backend /status/${jobId} -> ${res.status} ${body.slice(0, 200)}`);
+  }
+  return (await res.json()) as {
+    status: "running" | "completed" | "failed";
+    error?: string;
+  };
 }
 
 export function getResult(jobId: string): Promise<MirofishResult> {
