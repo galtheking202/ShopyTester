@@ -14,6 +14,8 @@ export interface RunPayload {
   variantB: string;
   requirement: string;
   componentType: string;
+  // Structured store-customer brief; the backend turns it into shopper personas.
+  audienceBrief?: unknown;
 }
 
 export interface MirofishResult {

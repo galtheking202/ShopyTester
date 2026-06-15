@@ -58,6 +58,7 @@ class RunRequest(BaseModel):
     variantB: str
     requirement: str = ""
     componentType: str = "component"
+    audienceBrief: dict | None = None
 
 
 class SuggestRequest(BaseModel):

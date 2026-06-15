@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from personas import build_audience_section
+
 
 @dataclass
 class Settings:
@@ -26,6 +28,9 @@ class Settings:
     max_rounds: int = int(os.getenv("MIROFISH_MAX_ROUNDS", "6"))
     runs_dir: Path = field(default_factory=lambda: Path(os.getenv("RUNS_DIR", "./runs")))
     provider: str = os.getenv("LLM_PROVIDER", "claude-cli")
+    # Single platform reads more like shopper deliberation than parallel, and
+    # roughly halves the (dominant) simulation cost. parallel|twitter|reddit.
+    platform: str = os.getenv("MIROFISH_PLATFORM", "reddit")
 
 
 # Numeric verdict fields we know how to interpret, best first.
@@ -108,6 +113,8 @@ def _run_mirofish(
         requirement,
         "--max-rounds",
         str(settings.max_rounds),
+        "--platform",
+        settings.platform,
         "--output-dir",
         str(out_dir),
         "--json",
@@ -136,11 +143,13 @@ def _run_mirofish(
 def _requirement(component_type: str, base: str) -> str:
     return (
         f"{base}\n\n"
-        f"You are simulating this store's realistic target shoppers reacting to the "
-        f"{component_type.replace('_', ' ')} variant provided in the second file, within the "
-        f"context of the whole store (first file). Predict overall purchase intent and "
-        f"sentiment for this variant. End your verdict with an explicit numeric "
-        f"'purchase_intent' score from 0 to 100 and a 'confidence' from 0 to 1."
+        "Simulate this store's realistic prospective shoppers (the 'Target shoppers' "
+        "described in the first file) making a buying decision about the "
+        f"{component_type.replace('_', ' ')} variant in the second file. Each shopper weighs "
+        "price vs. perceived value, trust and credibility, relevance to their needs, and voices "
+        "objections or excitement the way a real customer would before purchasing. Predict the "
+        "share of these shoppers who would buy. End the verdict with an explicit numeric "
+        "'purchase_intent' score from 0 to 100 and a 'confidence' from 0 to 1."
     )
 
 
@@ -157,10 +166,19 @@ def run_experiment(job_id: str, payload: dict, settings: Settings | None = None)
     component_type = payload.get("componentType", "component")
     requirement = _requirement(component_type, payload.get("requirement", ""))
 
+    # Seed shopper personas (once, shared by both variant runs). Gemini-generated
+    # for real runs; deterministic template in mock so mock stays free.
+    audience = build_audience_section(
+        payload.get("audienceBrief"), use_llm=not settings.mock
+    )
+    shop_context = (
+        f"{audience}\n\n{payload['shopContext']}" if audience else payload["shopContext"]
+    )
+
     ctx = run_root / "shop_context.md"
     var_a = run_root / "variant_a.md"
     var_b = run_root / "variant_b.md"
-    ctx.write_text(payload["shopContext"], encoding="utf-8")
+    ctx.write_text(shop_context, encoding="utf-8")
     var_a.write_text(payload["variantA"], encoding="utf-8")
     var_b.write_text(payload["variantB"], encoding="utf-8")
 

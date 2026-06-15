@@ -1,6 +1,10 @@
 import prisma from "../db.server";
 import type { ComponentType } from "./types";
-import { buildShopContext, renderComponentMarkdown } from "./serialize.server";
+import {
+  buildAudienceBrief,
+  buildShopContext,
+  renderComponentMarkdown,
+} from "./serialize.server";
 import { getResult, getStatus, startRun } from "./backend.server";
 
 interface CreateArgs {
@@ -46,9 +50,16 @@ export async function createAndLaunchExperiment(args: CreateArgs) {
     args.variantB,
   );
 
+  const audienceBrief = buildAudienceBrief(
+    all.map((c) => ({ type: c.type, title: c.title, data: c.data })),
+  );
+
+  const store = audienceBrief.brandName || "this store";
   const requirement =
-    `Predict which variant of the ${type.replace("_", " ")} "${component.title}" ` +
-    `drives more conversions and purchase intent for this store's shoppers.`;
+    `You are a prospective shopper for ${store}. After seeing the ` +
+    `${type.replace("_", " ")} "${component.title}", decide whether you would buy, ` +
+    `weighing price vs. value, trust, fit with your needs, and any objections. ` +
+    `We are comparing two variants to see which drives more purchase intent.`;
 
   const { jobId } = await startRun({
     shopContext,
@@ -56,6 +67,7 @@ export async function createAndLaunchExperiment(args: CreateArgs) {
     variantB: variantBMd,
     requirement,
     componentType: type,
+    audienceBrief,
   });
 
   return prisma.experiment.create({
