@@ -31,6 +31,8 @@ class Settings:
     # Single platform reads more like shopper deliberation than parallel, and
     # roughly halves the (dominant) simulation cost. parallel|twitter|reddit.
     platform: str = os.getenv("MIROFISH_PLATFORM", "reddit")
+    # Per-variant subprocess timeout in seconds (each A/B test runs this twice).
+    timeout: int = int(os.getenv("MIROFISH_TIMEOUT", "1800"))
 
 
 # Numeric verdict fields we know how to interpret, best first.
@@ -119,13 +121,20 @@ def _run_mirofish(
         str(out_dir),
         "--json",
     ]
-    proc = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        timeout=60 * 30,
-        env={**os.environ, "LLM_PROVIDER": settings.provider},
-    )
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=settings.timeout,
+            env={**os.environ, "LLM_PROVIDER": settings.provider},
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(
+            f"MiroFish timed out after {settings.timeout}s. Lower MIROFISH_MAX_ROUNDS "
+            f"and/or MIROFISH_PERSONAS, or raise MIROFISH_TIMEOUT. (Often caused by "
+            f"Gemini rate limits throttling the many calls a run makes.)"
+        )
     if proc.returncode != 0:
         raise RuntimeError(
             f"mirofish exited {proc.returncode}: {proc.stderr[-500:] or proc.stdout[-500:]}"
