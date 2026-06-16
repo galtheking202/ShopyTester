@@ -28,9 +28,10 @@ class Settings:
     max_rounds: int = int(os.getenv("MIROFISH_MAX_ROUNDS", "6"))
     runs_dir: Path = field(default_factory=lambda: Path(os.getenv("RUNS_DIR", "./runs")))
     provider: str = os.getenv("LLM_PROVIDER", "claude-cli")
-    # Single platform reads more like shopper deliberation than parallel, and
-    # roughly halves the (dominant) simulation cost. parallel|twitter|reddit.
-    platform: str = os.getenv("MIROFISH_PLATFORM", "reddit")
+    # Single platform (vs parallel) roughly halves the dominant simulation cost.
+    # NOTE: reddit hangs in camel-oasis 0.2.5 (env setup never completes); twitter
+    # works, so default to twitter. Avoid `parallel` (it includes the reddit path).
+    platform: str = os.getenv("MIROFISH_PLATFORM", "twitter")
     # Per-variant subprocess timeout in seconds (each A/B test runs this twice).
     timeout: int = int(os.getenv("MIROFISH_TIMEOUT", "1800"))
 
