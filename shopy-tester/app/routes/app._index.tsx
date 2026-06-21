@@ -44,9 +44,9 @@ export default function Index() {
   const { snapshot, experiments } = useLoaderData<typeof loader>();
 
   return (
-    <s-page heading="ShopSim — Predictive A/B Testing">
+    <s-page heading="ShopSim — Predictive Store Testing">
       <s-button slot="primary-action" href="/app/experiments/new" variant="primary">
-        New A/B test
+        New simulation
       </s-button>
 
       <s-section heading="Store snapshot">
@@ -61,7 +61,7 @@ export default function Index() {
             <s-stack direction="inline" gap="base">
               <s-button href="/app/snapshot">View / re-ingest</s-button>
               <s-button href="/app/experiments/new" variant="primary">
-                New A/B test
+                New simulation
               </s-button>
             </s-stack>
           </s-stack>
