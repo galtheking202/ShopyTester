@@ -71,6 +71,13 @@ class Settings:
     # Default storefront password for password-protected dev stores.
     storefront_password: str = field(default_factory=lambda: os.getenv("STOREFRONT_PASSWORD", ""))
 
+    # --- vision agent (vision_agent.py, Claude computer-use) -----------------
+    vision_model: str = field(default_factory=lambda: os.getenv("VISION_MODEL", "claude-opus-4-8"))
+    vision_max_steps: int = field(default_factory=lambda: int(os.getenv("VISION_MAX_STEPS", "20")))
+    # Viewport kept within Claude's image limits so coordinates map 1:1.
+    vision_viewport_w: int = field(default_factory=lambda: int(os.getenv("VISION_VIEWPORT_W", "1280")))
+    vision_viewport_h: int = field(default_factory=lambda: int(os.getenv("VISION_VIEWPORT_H", "800")))
+
 
 # Numeric verdict fields we know how to interpret, best first.
 SCORE_KEYS = re.compile(

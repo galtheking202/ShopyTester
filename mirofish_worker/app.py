@@ -27,6 +27,7 @@ except ImportError:
 import checkout_sim  # noqa: E402
 import runner  # noqa: E402
 import swarm  # noqa: E402
+import vision_agent  # noqa: E402
 from runner import Settings  # noqa: E402
 from suggest import suggest_variant  # noqa: E402
 
@@ -83,6 +84,9 @@ class CheckoutRequest(BaseModel):
     productHandle: str | None = None
     storefrontPassword: str | None = None
     completeOrder: bool = False
+    # "scripted" = selector heuristics (checkout_sim); "vision" = Claude
+    # computer-use agent driving the browser (vision_agent).
+    engine: str = "scripted"
 
 
 def _result_path(job_id: str) -> Path:
@@ -126,7 +130,12 @@ def _execute(job_id: str, payload: dict) -> None:
 
 
 def _execute_checkout(job_id: str, payload: dict) -> None:
-    _run_job(job_id, payload, checkout_sim.run_checkout)
+    fn = (
+        vision_agent.run_vision_checkout
+        if payload.get("engine") == "vision"
+        else checkout_sim.run_checkout
+    )
+    _run_job(job_id, payload, fn)
 
 
 @app.get("/health")

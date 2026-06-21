@@ -46,6 +46,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       productHandle: String(form.get("productHandle") || "") || undefined,
       storefrontPassword: String(form.get("storefrontPassword") || "") || undefined,
       completeOrder: form.get("completeOrder") === "on",
+      engine: form.get("engine") === "vision" ? "vision" : "scripted",
     });
     return redirect(`/app/checkout?jobId=${jobId}`);
   } catch (err) {
@@ -83,6 +84,14 @@ export default function Checkout() {
           </s-paragraph>
           <fetcher.Form method="post">
             <s-stack direction="block" gap="base">
+              <s-select label="Test engine" name="engine" value="scripted">
+                <s-option value="scripted">
+                  Scripted — fast selector heuristics
+                </s-option>
+                <s-option value="vision">
+                  AI vision agent — Claude sees the page and shops it (slower)
+                </s-option>
+              </s-select>
               <s-text-field
                 label="Store URL"
                 name="storeUrl"
