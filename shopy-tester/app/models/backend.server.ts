@@ -60,6 +60,26 @@ export function isFullResult(r: RunResult): r is FullResult {
   return (r as FullResult).mode === "full";
 }
 
+// Real browser-driven checkout-friction run (POST /checkout).
+export interface CheckoutPayload {
+  storeUrl: string;
+  productHandle?: string;
+  storefrontPassword?: string;
+  completeOrder?: boolean;
+}
+
+export interface CheckoutResult {
+  mode: "checkout";
+  storeUrl: string;
+  score: number; // 0-100, higher = smoother
+  reachedStep: string;
+  steps: { name: string; url: string; loadMs: number | null; ok: boolean; notes: string }[];
+  frictions: { step: string; severity: string; issue: string; evidence: string }[];
+  blockers: string[];
+  summaryMarkdown: string;
+  screenshots: Svg[];
+}
+
 // Shared secret sent to the backend (must match its BACKEND_SECRET). Lets the
 // backend stay private/unauthenticated-to-the-world while only the app can call it.
 const SECRET = process.env.BACKEND_SECRET || "";
@@ -113,6 +133,16 @@ export async function getStatus(
 }
 
 export function getResult(jobId: string): Promise<RunResult> {
+  return call(`/result/${jobId}`);
+}
+
+export function startCheckout(
+  payload: CheckoutPayload,
+): Promise<{ jobId: string; status: string }> {
+  return call("/checkout", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function getCheckoutResult(jobId: string): Promise<CheckoutResult> {
   return call(`/result/${jobId}`);
 }
 
