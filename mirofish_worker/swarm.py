@@ -186,6 +186,7 @@ def _boss_prompt(shop_context: str, brief: dict | None, mode: str) -> str:
         "Return ONLY a JSON object:\n"
         "{\n"
         '  "storeType": "<short phrase>",\n'
+        '  "language": "<the language of the store\'s customer-facing content, e.g. Hebrew, English, Spanish>",\n'
         '  "marketSentiment": "<1 sentence on how this market\'s buyers feel and decide>",\n'
         '  "buyerSegments": [{"name": "...", "share": <0-100>, "motivations": "...", '
         '"priceSensitivity": "low|medium|high", "objections": "..."}]  // 4-6 segments, shares ~sum 100'
@@ -194,7 +195,9 @@ def _boss_prompt(shop_context: str, brief: dict | None, mode: str) -> str:
     )
 
 
-def _summarize_prompt(mode: str, payload_brief: dict | None, data: dict) -> str:
+def _summarize_prompt(
+    mode: str, payload_brief: dict | None, data: dict, language: str
+) -> str:
     if mode == "ab":
         intro = (
             "Synthetic shoppers compared two variants of a "
@@ -208,7 +211,8 @@ def _summarize_prompt(mode: str, payload_brief: dict | None, data: dict) -> str:
             "weakest products, and concrete fixes."
         )
     return (
-        f"{intro}\n\nDATA (JSON):\n{json.dumps(data, indent=2)[:12000]}\n\n"
+        f"{intro}\n\nDATA (JSON):\n{json.dumps(data, indent=2, ensure_ascii=False)[:12000]}\n\n"
+        f"Write the ENTIRE report in {language} (the store's language). "
         'Return ONLY JSON: {"markdown": "<the report in GitHub-flavored Markdown>"}'
     )
 
@@ -219,7 +223,13 @@ def _summarize_prompt(mode: str, payload_brief: dict | None, data: dict) -> str:
 
 
 def _ab_agent_prompt(
-    summary: str, seg: dict | None, component_type: str, variant_a: str, variant_b: str, extra: str
+    summary: str,
+    seg: dict | None,
+    component_type: str,
+    variant_a: str,
+    variant_b: str,
+    extra: str,
+    language: str,
 ) -> str:
     return (
         f"Role-play ONE realistic shopper for {summary}\n"
@@ -228,6 +238,7 @@ def _ab_agent_prompt(
         f"You are shown two versions (A and B) of the same {component_type.replace('_', ' ')}. "
         "React to each as a buying decision, then say which you prefer.\n\n"
         f"VERSION A:\n{variant_a}\n\nVERSION B:\n{variant_b}\n\n"
+        f"Write your objections and reviews in {language} (the shopper's language). "
         "Return ONLY JSON:\n"
         '{"a": {"would_buy": true, "purchase_intent": 0-100, "objection": "<short>", "review": "<1-2 sentences, first person>"},\n'
         ' "b": {"would_buy": true, "purchase_intent": 0-100, "objection": "<short>", "review": "<1-2 sentences, first person>"},\n'
@@ -235,12 +246,15 @@ def _ab_agent_prompt(
     )
 
 
-def _full_agent_prompt(summary: str, seg: dict | None, product_block: str, extra: str) -> str:
+def _full_agent_prompt(
+    summary: str, seg: dict | None, product_block: str, extra: str, language: str
+) -> str:
     return (
         f"Role-play ONE realistic shopper for {summary}\n"
         f"Your shopper segment: {_segment_line(seg)}.\n"
         f"Adopt a concrete persona in that segment and react to this product as if shopping the store. {extra}\n\n"
         f"PRODUCT:\n{product_block}\n\n"
+        f"Write your persona label, objection, and review in {language} (the shopper's language). "
         "Decide whether you would buy it. Return ONLY JSON:\n"
         '{"persona": "<2-4 word label>", "would_buy": true, "purchase_intent": 0-100, '
         '"objection": "<main hesitation, short>", "review": "<1-2 sentence first-person reaction>"}'
@@ -287,13 +301,16 @@ async def _orchestrate(payload: dict, settings: Settings) -> dict:
     )
     summary = _store_summary(brief, profile)
     segments = profile.get("buyerSegments") or []
+    # All shopper-facing output (reviews, objections, report) is written in the
+    # store's own language so the merchant gets results they can read in context.
+    language = (profile.get("language") or "").strip() or "the store's own language"
 
     if mode == "full":
-        return await _full(payload, settings, profile, summary, segments, shop_context)
-    return await _ab(payload, settings, profile, summary, segments, extra)
+        return await _full(payload, settings, profile, summary, segments, shop_context, language)
+    return await _ab(payload, settings, profile, summary, segments, extra, language)
 
 
-async def _ab(payload, settings, profile, summary, segments, extra) -> dict:
+async def _ab(payload, settings, profile, summary, segments, extra, language) -> dict:
     n = max(1, min(settings.ab_agent_count, settings.max_easy_agent))
     component_type = payload.get("componentType", "component")
     variant_a = payload.get("variantA") or ""
@@ -301,7 +318,7 @@ async def _ab(payload, settings, profile, summary, segments, extra) -> dict:
     seg_assign = _allocate_segments(segments, n)
 
     prompts = [
-        _ab_agent_prompt(summary, seg, component_type, variant_a, variant_b, extra)
+        _ab_agent_prompt(summary, seg, component_type, variant_a, variant_b, extra, language)
         for seg in seg_assign
     ]
     neutral = {"a": {"purchase_intent": 50}, "b": {"purchase_intent": 50}, "prefers": "neither"}
@@ -352,7 +369,7 @@ async def _ab(payload, settings, profile, summary, segments, extra) -> dict:
     }
     summary_out = await asyncio.to_thread(
         gemini.chat_json,
-        _summarize_prompt("ab", payload.get("audienceBrief"), report_data),
+        _summarize_prompt("ab", payload.get("audienceBrief"), report_data, language),
         model=settings.boss_model,
         temperature=0.6,
         max_output_tokens=1500,
@@ -367,7 +384,7 @@ async def _ab(payload, settings, profile, summary, segments, extra) -> dict:
     }
 
 
-async def _full(payload, settings, profile, summary, segments, shop_context) -> dict:
+async def _full(payload, settings, profile, summary, segments, shop_context, language) -> dict:
     # Prefer the boss-ranked product list; fall back to parsing the context.
     blocks = dict(_split_products(shop_context))
     ranked = profile.get("products") or [{"title": t} for t in blocks]
@@ -392,7 +409,7 @@ async def _full(payload, settings, profile, summary, segments, shop_context) -> 
     owner: list[int] = []  # prompt index -> product index
     for pi, (_title, block) in enumerate(selected):
         for seg in _allocate_segments(segments, per):
-            prompts.append(_full_agent_prompt(summary, seg, block, ""))
+            prompts.append(_full_agent_prompt(summary, seg, block, "", language))
             owner.append(pi)
 
     neutral = {"persona": "(no response)", "purchase_intent": 50, "objection": "", "review": ""}
@@ -454,7 +471,7 @@ async def _full(payload, settings, profile, summary, segments, shop_context) -> 
     }
     summary_out = await asyncio.to_thread(
         gemini.chat_json,
-        _summarize_prompt("full", payload.get("audienceBrief"), summary_data),
+        _summarize_prompt("full", payload.get("audienceBrief"), summary_data, language),
         model=settings.boss_model,
         temperature=0.6,
         max_output_tokens=2000,
