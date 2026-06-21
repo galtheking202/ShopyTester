@@ -283,7 +283,7 @@ async def _orchestrate(payload: dict, settings: Settings) -> dict:
         _boss_prompt(shop_context, brief, mode),
         model=settings.boss_model,
         temperature=0.7,
-        max_output_tokens=2048,
+        max_output_tokens=4096,
     )
     summary = _store_summary(brief, profile)
     segments = profile.get("buyerSegments") or []

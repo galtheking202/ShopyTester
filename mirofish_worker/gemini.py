@@ -66,12 +66,21 @@ def chat_json(
     """One blocking Gemini call returning parsed JSON. Retries transient errors."""
     client = _get_client()  # raises a friendly error if the key is missing
     from google.genai import types
+
+    # gemini-2.5-pro CANNOT disable thinking (budget 0 -> "only works in thinking
+    # mode"). flash/flash-lite accept budget 0, which we use to avoid truncating
+    # the JSON answer and to keep the parallel swarm cheap. For pro, use a small
+    # fixed budget so thinking is bounded and separate from the output budget.
+    budget = (
+        int(os.getenv("BOSS_THINKING_BUDGET", "512"))
+        if "pro" in model.lower()
+        else 0
+    )
     config = types.GenerateContentConfig(
         temperature=temperature,
         max_output_tokens=max_output_tokens,
         response_mime_type="application/json",
-        # Disable Gemini 2.5 "thinking" so JSON answers aren't truncated.
-        thinking_config=types.ThinkingConfig(thinking_budget=0),
+        thinking_config=types.ThinkingConfig(thinking_budget=budget),
         http_options=types.HttpOptions(
             timeout=int(os.getenv("GEMINI_TIMEOUT_MS", "120000"))
         ),
