@@ -27,6 +27,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
         title: string;
         score: number;
         topObjections: string[];
+        issues?: string[];
         highlight: string;
       }[];
       reviews?: { persona: string; rating: number; text: string }[];
@@ -218,6 +219,11 @@ export default function ExperimentDetail() {
                   {p.topObjections.length > 0 && (
                     <s-text color="subdued">
                       Top objections: {p.topObjections.join("; ")}
+                    </s-text>
+                  )}
+                  {(p.issues?.length ?? 0) > 0 && (
+                    <s-text color="subdued">
+                      ⚠ Copy issues: {p.issues!.join("; ")}
                     </s-text>
                   )}
                   {p.highlight && <s-paragraph>“{p.highlight}”</s-paragraph>}

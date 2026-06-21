@@ -212,6 +212,8 @@ def _summarize_prompt(
         )
     return (
         f"{intro}\n\nDATA (JSON):\n{json.dumps(data, indent=2, ensure_ascii=False)[:12000]}\n\n"
+        "Include a 'Content quality' section that lists the spelling/grammar mistakes and "
+        "unclear or confusing descriptions found (from the 'issues' data), each with a concrete fix. "
         f"Write the ENTIRE report in {language} (the store's language). "
         'Return ONLY JSON: {"markdown": "<the report in GitHub-flavored Markdown>"}'
     )
@@ -238,10 +240,11 @@ def _ab_agent_prompt(
         f"You are shown two versions (A and B) of the same {component_type.replace('_', ' ')}. "
         "React to each as a buying decision, then say which you prefer.\n\n"
         f"VERSION A:\n{variant_a}\n\nVERSION B:\n{variant_b}\n\n"
-        f"Write your objections and reviews in {language} (the shopper's language). "
+        "Also flag any spelling/grammar mistakes or unclear, confusing wording in each version's copy.\n"
+        f"Write your objections, reviews, and any issues in {language} (the shopper's language). "
         "Return ONLY JSON:\n"
-        '{"a": {"would_buy": true, "purchase_intent": 0-100, "objection": "<short>", "review": "<1-2 sentences, first person>"},\n'
-        ' "b": {"would_buy": true, "purchase_intent": 0-100, "objection": "<short>", "review": "<1-2 sentences, first person>"},\n'
+        '{"a": {"would_buy": true, "purchase_intent": 0-100, "objection": "<short>", "review": "<1-2 sentences, first person>", "issues": ["<copy problem; [] if none>"]},\n'
+        ' "b": {"would_buy": true, "purchase_intent": 0-100, "objection": "<short>", "review": "<1-2 sentences, first person>", "issues": ["<copy problem; [] if none>"]},\n'
         ' "prefers": "A"|"B"|"neither"}'
     )
 
@@ -254,10 +257,13 @@ def _full_agent_prompt(
         f"Your shopper segment: {_segment_line(seg)}.\n"
         f"Adopt a concrete persona in that segment and react to this product as if shopping the store. {extra}\n\n"
         f"PRODUCT:\n{product_block}\n\n"
-        f"Write your persona label, objection, and review in {language} (the shopper's language). "
-        "Decide whether you would buy it. Return ONLY JSON:\n"
+        "Also scan the product copy for spelling/grammar mistakes and unclear, confusing, or "
+        "missing-information wording.\n"
+        f"Write your persona label, objection, review, and any issues in {language} "
+        "(the shopper's language). Decide whether you would buy it. Return ONLY JSON:\n"
         '{"persona": "<2-4 word label>", "would_buy": true, "purchase_intent": 0-100, '
-        '"objection": "<main hesitation, short>", "review": "<1-2 sentence first-person reaction>"}'
+        '"objection": "<main hesitation, short>", "review": "<1-2 sentence first-person reaction>", '
+        '"issues": ["<a spelling/grammar/clarity problem in the copy, quoting the text; [] if none>"]}'
     )
 
 
@@ -335,6 +341,7 @@ async def _ab(payload, settings, profile, summary, segments, extra, language) ->
     a_pref = b_pref = 0
     reviews: list[dict] = []
     objs_a, objs_b = [], []
+    issues_a, issues_b = [], []
     for r in results:
         a, b = r.get("a") or {}, r.get("b") or {}
         intents_a.append(_intent(a.get("purchase_intent")))
@@ -348,6 +355,10 @@ async def _ab(payload, settings, profile, summary, segments, extra, language) ->
             objs_a.append(str(a["objection"]))
         if b.get("objection"):
             objs_b.append(str(b["objection"]))
+        for rec, sink in ((a, issues_a), (b, issues_b)):
+            for issue in rec.get("issues") or []:
+                if isinstance(issue, str) and issue.strip():
+                    sink.append(issue.strip())
         for side, rec in (("A", a), ("B", b)):
             if rec.get("review"):
                 reviews.append({"variant": side, "text": str(rec["review"])})
@@ -365,6 +376,8 @@ async def _ab(payload, settings, profile, summary, segments, extra, language) ->
         "preferenceCounts": {"A": a_pref, "B": b_pref, "neither": len(results) - a_pref - b_pref},
         "topObjectionsA": _top_objections(objs_a),
         "topObjectionsB": _top_objections(objs_b),
+        "copyIssuesA": _top_objections(issues_a),
+        "copyIssuesB": _top_objections(issues_b),
         "sampleReviews": reviews[:8],
     }
     summary_out = await asyncio.to_thread(
@@ -424,7 +437,8 @@ async def _full(payload, settings, profile, summary, segments, shop_context, lan
 
     # Aggregate per product.
     by_product: list[dict] = [
-        {"title": t, "intents": [], "objections": [], "reviews": []} for t, _ in selected
+        {"title": t, "intents": [], "objections": [], "issues": [], "reviews": []}
+        for t, _ in selected
     ]
     all_reviews: list[dict] = []
     for r, pi in zip(results, owner):
@@ -432,6 +446,9 @@ async def _full(payload, settings, profile, summary, segments, shop_context, lan
         bucket["intents"].append(_intent(r.get("purchase_intent")))
         if r.get("objection"):
             bucket["objections"].append(str(r["objection"]))
+        for issue in r.get("issues") or []:
+            if isinstance(issue, str) and issue.strip():
+                bucket["issues"].append(issue.strip())
         review = str(r.get("review") or "").strip()
         if review:
             rating = _intent(r.get("purchase_intent"))
@@ -451,6 +468,7 @@ async def _full(payload, settings, profile, summary, segments, shop_context, lan
                 "title": b["title"],
                 "score": round(score, 1),
                 "topObjections": _top_objections(b["objections"]),
+                "issues": _top_objections(b["issues"]),
                 "highlight": highlight,
             }
         )
@@ -508,6 +526,7 @@ def _mock(payload: dict) -> dict:
                     "title": title,
                     "score": score,
                     "topObjections": ["price", "shipping time"],
+                    "issues": ["(mock) unclear sizing in the description"],
                     "highlight": f"As a shopper I found {title} appealing but hesitated on price.",
                 }
             )

@@ -47,6 +47,7 @@ export interface FullResult {
     title: string;
     score: number;
     topObjections: string[];
+    issues: string[];
     highlight: string;
   }[];
   reviews: { persona: string; rating: number; text: string }[];

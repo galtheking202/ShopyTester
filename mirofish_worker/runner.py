@@ -23,32 +23,37 @@ from personas import build_audience_section
 
 @dataclass
 class Settings:
-    mock: bool = os.getenv("MIROFISH_MOCK", "0") in ("1", "true", "True")
-    bin: str = os.getenv("MIROFISH_BIN", "mirofish")
-    max_rounds: int = int(os.getenv("MIROFISH_MAX_ROUNDS", "6"))
+    # All env reads use default_factory so they're evaluated when Settings() is
+    # instantiated, NOT at class-definition (import) time. This keeps the values
+    # correct regardless of whether runner/swarm is imported before load_dotenv().
+    mock: bool = field(
+        default_factory=lambda: os.getenv("MIROFISH_MOCK", "0") in ("1", "true", "True")
+    )
+    bin: str = field(default_factory=lambda: os.getenv("MIROFISH_BIN", "mirofish"))
+    max_rounds: int = field(default_factory=lambda: int(os.getenv("MIROFISH_MAX_ROUNDS", "6")))
     runs_dir: Path = field(default_factory=lambda: Path(os.getenv("RUNS_DIR", "./runs")))
-    provider: str = os.getenv("LLM_PROVIDER", "claude-cli")
+    provider: str = field(default_factory=lambda: os.getenv("LLM_PROVIDER", "claude-cli"))
     # Single platform (vs parallel) roughly halves the dominant simulation cost.
     # NOTE: reddit hangs in camel-oasis 0.2.5 (env setup never completes); twitter
     # works, so default to twitter. Avoid `parallel` (it includes the reddit path).
-    platform: str = os.getenv("MIROFISH_PLATFORM", "twitter")
+    platform: str = field(default_factory=lambda: os.getenv("MIROFISH_PLATFORM", "twitter"))
     # Per-variant subprocess timeout in seconds (each A/B test runs this twice).
-    timeout: int = int(os.getenv("MIROFISH_TIMEOUT", "1800"))
+    timeout: int = field(default_factory=lambda: int(os.getenv("MIROFISH_TIMEOUT", "1800")))
 
     # --- swarm engine (swarm.py) knobs ---------------------------------------
     # Full-store mode allocates AGENTS_PER_PRODUCT agents to each product, capped
     # at MAX_EASY_AGENT total. A/B mode uses AB_AGENT_COUNT agents (paired).
-    agents_per_product: int = int(os.getenv("AGENTS_PER_PRODUCT", "10"))
-    max_easy_agent: int = int(os.getenv("MAX_EASY_AGENT", "100"))
-    ab_agent_count: int = int(os.getenv("AB_AGENT_COUNT", "10"))
+    agents_per_product: int = field(default_factory=lambda: int(os.getenv("AGENTS_PER_PRODUCT", "10")))
+    max_easy_agent: int = field(default_factory=lambda: int(os.getenv("MAX_EASY_AGENT", "100")))
+    ab_agent_count: int = field(default_factory=lambda: int(os.getenv("AB_AGENT_COUNT", "10")))
     # Max simultaneous Gemini calls across the whole run.
-    easy_concurrency: int = int(os.getenv("EASY_CONCURRENCY", "12"))
+    easy_concurrency: int = field(default_factory=lambda: int(os.getenv("EASY_CONCURRENCY", "12")))
     # Heavy model grasps the store / designs personas / writes the report;
     # the cheap model powers the parallel easy-agent swarm.
-    boss_model: str = os.getenv("BOSS_MODEL", "gemini-2.5-pro")
-    easy_model: str = os.getenv("EASY_MODEL", "gemini-2.5-flash")
+    boss_model: str = field(default_factory=lambda: os.getenv("BOSS_MODEL", "gemini-2.5-pro"))
+    easy_model: str = field(default_factory=lambda: os.getenv("EASY_MODEL", "gemini-2.5-flash"))
     # Global per-run wall-clock budget for a swarm run (seconds).
-    swarm_timeout: int = int(os.getenv("SWARM_TIMEOUT", "900"))
+    swarm_timeout: int = field(default_factory=lambda: int(os.getenv("SWARM_TIMEOUT", "900")))
 
 
 # Numeric verdict fields we know how to interpret, best first.
