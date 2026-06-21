@@ -72,6 +72,7 @@ export interface CheckoutPayload {
 
 export interface CheckoutResult {
   mode: "checkout";
+  engine?: "scripted" | "vision";
   storeUrl: string;
   score: number; // 0-100, higher = smoother
   reachedStep: string;
