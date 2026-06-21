@@ -41,6 +41,8 @@ RUN cd /opt/mirofish-cli \
 WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
+# Chromium + OS deps for the checkout-friction simulator (checkout_sim.py).
+RUN playwright install --with-deps chromium
 COPY . .
 
 ENV MIROFISH_BIN=/opt/mirofish-cli/.venv/bin/mirofish \

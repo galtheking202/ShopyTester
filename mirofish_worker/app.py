@@ -24,8 +24,10 @@ try:
 except ImportError:
     pass
 
+import checkout_sim  # noqa: E402
 import runner  # noqa: E402
 import swarm  # noqa: E402
+import vision_agent  # noqa: E402
 from runner import Settings  # noqa: E402
 from suggest import suggest_variant  # noqa: E402
 
@@ -77,6 +79,16 @@ class SuggestRequest(BaseModel):
     baseline: dict[str, str]
 
 
+class CheckoutRequest(BaseModel):
+    storeUrl: str
+    productHandle: str | None = None
+    storefrontPassword: str | None = None
+    completeOrder: bool = False
+    # "scripted" = selector heuristics (checkout_sim); "vision" = Claude
+    # computer-use agent driving the browser (vision_agent).
+    engine: str = "scripted"
+
+
 def _result_path(job_id: str) -> Path:
     return settings.runs_dir / job_id / "result.json"
 
@@ -101,15 +113,29 @@ def _get(job_id: str) -> dict | None:
     return None
 
 
-def _execute(job_id: str, payload: dict) -> None:
+def _run_job(job_id: str, payload: dict, fn) -> None:
+    """Run a job function, persist its result, and update the job table."""
     try:
-        result = _run_experiment(job_id, payload, settings)
+        result = fn(job_id, payload, settings)
         rp = _result_path(job_id)
         rp.parent.mkdir(parents=True, exist_ok=True)
         rp.write_text(json.dumps(result), encoding="utf-8")
         _set(job_id, status="completed", result=result)
     except Exception as err:  # noqa: BLE001 - surface any failure to the client
         _set(job_id, status="failed", error=str(err)[:1000])
+
+
+def _execute(job_id: str, payload: dict) -> None:
+    _run_job(job_id, payload, _run_experiment)
+
+
+def _execute_checkout(job_id: str, payload: dict) -> None:
+    fn = (
+        vision_agent.run_vision_checkout
+        if payload.get("engine") == "vision"
+        else checkout_sim.run_checkout
+    )
+    _run_job(job_id, payload, fn)
 
 
 @app.get("/health")
@@ -122,6 +148,15 @@ def run(req: RunRequest, background: BackgroundTasks) -> dict:
     job_id = uuid.uuid4().hex
     _set(job_id, status="running")
     background.add_task(_execute, job_id, req.model_dump())
+    return {"jobId": job_id, "status": "running"}
+
+
+@app.post("/checkout", dependencies=guard)
+def checkout(req: CheckoutRequest, background: BackgroundTasks) -> dict:
+    """Start a real browser-driven checkout-friction run (results via /status,/result)."""
+    job_id = uuid.uuid4().hex
+    _set(job_id, status="running")
+    background.add_task(_execute_checkout, job_id, req.model_dump())
     return {"jobId": job_id, "status": "running"}
 
 

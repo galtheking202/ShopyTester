@@ -55,6 +55,29 @@ class Settings:
     # Global per-run wall-clock budget for a swarm run (seconds).
     swarm_timeout: int = field(default_factory=lambda: int(os.getenv("SWARM_TIMEOUT", "900")))
 
+    # --- checkout-friction simulator (checkout_sim.py) knobs -----------------
+    checkout_headless: bool = field(
+        default_factory=lambda: os.getenv("CHECKOUT_HEADLESS", "1") in ("1", "true", "True")
+    )
+    # Per-navigation timeout (ms) and overall run budget (s).
+    checkout_nav_timeout: int = field(default_factory=lambda: int(os.getenv("CHECKOUT_NAV_TIMEOUT_MS", "30000")))
+    checkout_timeout: int = field(default_factory=lambda: int(os.getenv("CHECKOUT_TIMEOUT", "180")))
+    # A step slower than this (ms) is flagged as friction.
+    checkout_slow_step_ms: int = field(default_factory=lambda: int(os.getenv("CHECKOUT_SLOW_STEP_MS", "4000")))
+    # Capture a screenshot per step (evidence) — disable to shrink result size.
+    checkout_screenshots: bool = field(
+        default_factory=lambda: os.getenv("CHECKOUT_SCREENSHOTS", "1") in ("1", "true", "True")
+    )
+    # Default storefront password for password-protected dev stores.
+    storefront_password: str = field(default_factory=lambda: os.getenv("STOREFRONT_PASSWORD", ""))
+
+    # --- vision agent (vision_agent.py, Claude computer-use) -----------------
+    vision_model: str = field(default_factory=lambda: os.getenv("VISION_MODEL", "claude-opus-4-8"))
+    vision_max_steps: int = field(default_factory=lambda: int(os.getenv("VISION_MAX_STEPS", "20")))
+    # Viewport kept within Claude's image limits so coordinates map 1:1.
+    vision_viewport_w: int = field(default_factory=lambda: int(os.getenv("VISION_VIEWPORT_W", "1280")))
+    vision_viewport_h: int = field(default_factory=lambda: int(os.getenv("VISION_VIEWPORT_H", "800")))
+
 
 # Numeric verdict fields we know how to interpret, best first.
 SCORE_KEYS = re.compile(
