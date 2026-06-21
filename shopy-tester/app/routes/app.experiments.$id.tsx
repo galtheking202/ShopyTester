@@ -20,10 +20,24 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     where: { id: params.id! },
     include: { variants: true, component: true },
   });
+  const full =
+    (exp.fullResult as {
+      summaryMarkdown?: string;
+      products?: {
+        title: string;
+        score: number;
+        topObjections: string[];
+        highlight: string;
+      }[];
+      reviews?: { persona: string; rating: number; text: string }[];
+      svgs?: { name: string; dataUri: string }[];
+    } | null) ?? null;
+
   return {
     exp: {
       id: exp.id,
       name: exp.name,
+      mode: exp.mode,
       componentType: exp.componentType,
       status: exp.status,
       winner: exp.winner,
@@ -32,7 +46,12 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       scoreB: exp.scoreB,
       reportMarkdown: exp.reportMarkdown,
       error: exp.error,
-      svgs: (exp.svgs as { name: string; dataUri: string }[] | null) ?? [],
+      svgs:
+        exp.mode === "full"
+          ? full?.svgs ?? []
+          : ((exp.svgs as { name: string; dataUri: string }[] | null) ?? []),
+      storeScore: exp.storeScore,
+      full,
       variants: exp.variants.map((v) => ({
         label: v.label,
         data: v.data as Record<string, string>,
@@ -47,11 +66,14 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     where: { id: params.id! },
     include: { variants: true, component: true },
   });
+  if (exp.mode === "full") {
+    return { error: "Full-store tests don’t have a variant to apply." };
+  }
   if (exp.status !== "completed" || !exp.winner) {
     return { error: "Experiment is not completed yet." };
   }
   const winning = exp.variants.find((v) => v.label === exp.winner);
-  if (!winning || !exp.component.externalId) {
+  if (!winning || !exp.component?.externalId) {
     return { error: "Winning variant or component reference is missing." };
   }
   try {
@@ -85,7 +107,10 @@ export default function ExperimentDetail() {
   const variantA = exp.variants.find((v) => v.label === "A");
   const variantB = exp.variants.find((v) => v.label === "B");
   const done = exp.status === "completed" || exp.status === "applied";
-  const canApply = APPLYABLE_TYPES.includes(exp.componentType as ComponentType);
+  const canApply =
+    exp.mode === "ab" &&
+    APPLYABLE_TYPES.includes(exp.componentType as ComponentType);
+  const isFull = exp.mode === "full";
 
   return (
     <s-page heading={exp.name}>
@@ -93,7 +118,13 @@ export default function ExperimentDetail() {
         Back
       </s-button>
 
-      <s-section heading={`${exp.componentType} · MiroFish verdict`}>
+      <s-section
+        heading={
+          isFull
+            ? "Full-store customer test"
+            : `${exp.componentType} · A/B verdict`
+        }
+      >
         <s-stack direction="block" gap="base">
           <s-badge tone={statusTone(exp.status)}>{exp.status}</s-badge>
 
@@ -112,7 +143,16 @@ export default function ExperimentDetail() {
             </s-banner>
           )}
 
-          {done && (
+          {done && isFull && (
+            <s-banner
+              tone="success"
+              heading={`Store score: ${Math.round(exp.storeScore ?? 0)}/100`}
+            >
+              Synthetic shoppers rated the overall store experience.
+            </s-banner>
+          )}
+
+          {done && !isFull && (
             <s-stack direction="block" gap="base">
               <s-banner tone="success" heading={`Winner: Variant ${exp.winner}`}>
                 Confidence {((exp.confidence ?? 0) * 100).toFixed(0)}%
@@ -150,16 +190,66 @@ export default function ExperimentDetail() {
         </s-stack>
       </s-section>
 
-      <s-section heading="Variants">
-        <s-stack direction="inline" gap="base">
-          <s-box inlineSize="50%">
-            <VariantCard label="A" data={variantA?.data ?? {}} />
-          </s-box>
-          <s-box inlineSize="50%">
-            <VariantCard label="B" data={variantB?.data ?? {}} />
-          </s-box>
-        </s-stack>
-      </s-section>
+      {!isFull && (
+        <s-section heading="Variants">
+          <s-stack direction="inline" gap="base">
+            <s-box inlineSize="50%">
+              <VariantCard label="A" data={variantA?.data ?? {}} />
+            </s-box>
+            <s-box inlineSize="50%">
+              <VariantCard label="B" data={variantB?.data ?? {}} />
+            </s-box>
+          </s-stack>
+        </s-section>
+      )}
+
+      {isFull && done && (exp.full?.products?.length ?? 0) > 0 && (
+        <s-section heading="Per-product results">
+          <s-stack direction="block" gap="base">
+            {exp.full!.products!.map((p) => (
+              <s-box
+                key={p.title}
+                padding="base"
+                borderWidth="base"
+                borderRadius="base"
+              >
+                <s-stack direction="block" gap="small-300">
+                  <ScoreRow label={p.title} score={p.score / 100} />
+                  {p.topObjections.length > 0 && (
+                    <s-text color="subdued">
+                      Top objections: {p.topObjections.join("; ")}
+                    </s-text>
+                  )}
+                  {p.highlight && <s-paragraph>“{p.highlight}”</s-paragraph>}
+                </s-stack>
+              </s-box>
+            ))}
+          </s-stack>
+        </s-section>
+      )}
+
+      {isFull && done && (exp.full?.reviews?.length ?? 0) > 0 && (
+        <s-section heading="Synthetic reviews">
+          <s-stack direction="block" gap="small-300">
+            {exp.full!.reviews!.map((r, i) => (
+              <s-box
+                key={i}
+                padding="base"
+                borderWidth="base"
+                borderRadius="base"
+              >
+                <s-stack direction="block" gap="small-500">
+                  <s-stack direction="inline" gap="base" justifyContent="space-between">
+                    <s-text type="strong">{r.persona}</s-text>
+                    <s-badge>{Math.round(r.rating)}/100</s-badge>
+                  </s-stack>
+                  <s-paragraph>{r.text}</s-paragraph>
+                </s-stack>
+              </s-box>
+            ))}
+          </s-stack>
+        </s-section>
+      )}
 
       {exp.svgs.length > 0 && (
         <s-section heading="Simulation visuals">
@@ -180,7 +270,7 @@ export default function ExperimentDetail() {
         </s-section>
       )}
 
-      {exp.reportMarkdown && (
+      {(exp.reportMarkdown || exp.full?.summaryMarkdown) && (
         <s-section heading="Report">
           <pre
             style={{
@@ -190,7 +280,7 @@ export default function ExperimentDetail() {
               margin: 0,
             }}
           >
-            {exp.reportMarkdown}
+            {isFull ? exp.full?.summaryMarkdown : exp.reportMarkdown}
           </pre>
         </s-section>
       )}

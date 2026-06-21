@@ -14,21 +14,21 @@ datasource db {
 }
 
 model Session {
-  id            String    @id
-  shop          String
-  state         String
-  isOnline      Boolean   @default(false)
-  scope         String?
-  expires       DateTime?
-  accessToken   String
-  userId        BigInt?
-  firstName     String?
-  lastName      String?
-  email         String?
-  accountOwner  Boolean   @default(false)
-  locale        String?
-  collaborator  Boolean?  @default(false)
-  emailVerified Boolean?  @default(false)
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
@@ -62,25 +62,32 @@ model Component {
   @@index([type])
 }
 
-// A single per-component predictive A/B test.
+// A predictive simulation: either an "ab" per-component A/B test, or a "full"
+// whole-store customer-experience audit.
 model Experiment {
   id             String       @id @default(cuid())
   shop           String
   snapshot       ShopSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
   snapshotId     String
-  component      Component    @relation(fields: [componentId], references: [id], onDelete: Cascade)
-  componentId    String
-  componentType  String
+  // Component is set for "ab" runs; null for "full" (whole-store) runs.
+  component      Component?   @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  componentId    String?
+  componentType  String?
+  mode           String       @default("ab") // ab | full
   name           String
-  requirement    String // natural-language objective sent to MiroFish
+  requirement    String // natural-language objective sent to the backend
   status         String       @default("draft") // draft|running|completed|failed|applied
   jobId          String? // backend job id
+  // --- "ab" result ---
   winner         String? // "A" | "B"
   confidence     Float?
   scoreA         Float?
   scoreB         Float?
   reportMarkdown String?
   svgs           Json? // list of { name, dataUri }
+  // --- "full" result ---
+  storeScore     Float? // overall store score 0-100
+  fullResult     Json? // { summaryMarkdown, products[], reviews[], svgs[] }
   error          String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
