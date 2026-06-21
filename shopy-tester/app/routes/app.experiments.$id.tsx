@@ -1,16 +1,10 @@
 import { useEffect } from "react";
-import type {
-  ActionFunctionArgs,
-  HeadersFunction,
-  LoaderFunctionArgs,
-} from "react-router";
-import { useFetcher, useLoaderData, useRevalidator } from "react-router";
+import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { useLoaderData, useRevalidator } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { refreshExperiment } from "../models/experiment.server";
-import { applyWinner } from "../models/apply.server";
-import { APPLYABLE_TYPES, type ComponentType } from "../models/types";
 import { statusTone } from "../models/status";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
@@ -61,43 +55,9 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   };
 };
 
-export const action = async ({ request, params }: ActionFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
-  const exp = await prisma.experiment.findUniqueOrThrow({
-    where: { id: params.id! },
-    include: { variants: true, component: true },
-  });
-  if (exp.mode === "full") {
-    return { error: "Full-store tests don’t have a variant to apply." };
-  }
-  if (exp.status !== "completed" || !exp.winner) {
-    return { error: "Experiment is not completed yet." };
-  }
-  const winning = exp.variants.find((v) => v.label === exp.winner);
-  if (!winning || !exp.component?.externalId) {
-    return { error: "Winning variant or component reference is missing." };
-  }
-  try {
-    await applyWinner(
-      admin.graphql,
-      exp.componentType as ComponentType,
-      exp.component.externalId,
-      winning.data as Record<string, string>,
-    );
-    await prisma.experiment.update({
-      where: { id: exp.id },
-      data: { status: "applied" },
-    });
-    return { applied: true };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : String(err) };
-  }
-};
-
 export default function ExperimentDetail() {
   const { exp } = useLoaderData<typeof loader>();
   const revalidator = useRevalidator();
-  const applyFetcher = useFetcher<{ applied?: boolean; error?: string }>();
 
   useEffect(() => {
     if (exp.status !== "running") return;
@@ -107,10 +67,7 @@ export default function ExperimentDetail() {
 
   const variantA = exp.variants.find((v) => v.label === "A");
   const variantB = exp.variants.find((v) => v.label === "B");
-  const done = exp.status === "completed" || exp.status === "applied";
-  const canApply =
-    exp.mode === "ab" &&
-    APPLYABLE_TYPES.includes(exp.componentType as ComponentType);
+  const done = exp.status === "completed";
   const isFull = exp.mode === "full";
 
   return (
@@ -161,31 +118,10 @@ export default function ExperimentDetail() {
               <ScoreRow label="Variant A purchase intent" score={exp.scoreA ?? 0} />
               <ScoreRow label="Variant B purchase intent" score={exp.scoreB ?? 0} />
 
-              {canApply ? (
-                <s-button
-                  variant="primary"
-                  {...(exp.status === "applied" ? { disabled: true } : {})}
-                  {...(applyFetcher.state !== "idle" ? { loading: true } : {})}
-                  onClick={() => applyFetcher.submit({}, { method: "post" })}
-                >
-                  {exp.status === "applied"
-                    ? "Applied to store"
-                    : `Apply Variant ${exp.winner} to store`}
-                </s-button>
-              ) : (
-                <s-text color="subdued">
-                  Automatic apply isn’t supported for {exp.componentType}; update
-                  it manually in your admin.
-                </s-text>
-              )}
-              {applyFetcher.data?.error && (
-                <s-banner tone="critical">{applyFetcher.data.error}</s-banner>
-              )}
-              {applyFetcher.data?.applied && (
-                <s-banner tone="success">
-                  Winning variant written to your store.
-                </s-banner>
-              )}
+              <s-text color="subdued">
+                This is feedback only — apply the winning copy yourself in your
+                Shopify admin.
+              </s-text>
             </s-stack>
           )}
         </s-stack>

@@ -26,13 +26,6 @@ export interface IngestResult {
   warnings: string[];
 }
 
-// Which component types support one-click write-back of a winning variant.
-export const APPLYABLE_TYPES: ComponentType[] = [
-  "product",
-  "collection",
-  "page",
-];
-
 // Human-readable labels.
 export const TYPE_LABELS: Record<ComponentType, string> = {
   product: "Product",

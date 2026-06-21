@@ -6,8 +6,8 @@ embedded = true
 name = "ShopyTester"
 
 [access_scopes]
-# Scopes needed to ingest the whole shop and write winning variants back.
-scopes = "read_products,write_products,read_content,write_content,read_themes,write_themes,read_online_store_pages,read_online_store_navigation"
+# Read-only: the app only scans the shop and gives feedback; it never writes.
+scopes = "read_products,read_content,read_themes,read_online_store_pages,read_online_store_navigation"
 
 [webhooks]
 api_version = "2026-07"
