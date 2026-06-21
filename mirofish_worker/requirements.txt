@@ -8,6 +8,8 @@ google-genai>=1.0
 # The browser binary is installed separately in the Dockerfile via
 # `playwright install --with-deps chromium`.
 playwright>=1.40
+# Vision agent (vision_agent.py): Claude computer-use drives the browser.
+anthropic>=0.49
 # MiroFish CLI (provides the `mirofish` command). Install separately if this
 # pin is unavailable on PyPI in your environment:
 #   uv tool install mirofish        (recommended)

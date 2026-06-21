@@ -66,6 +66,8 @@ export interface CheckoutPayload {
   productHandle?: string;
   storefrontPassword?: string;
   completeOrder?: boolean;
+  // "scripted" = selector heuristics; "vision" = Claude computer-use agent.
+  engine?: "scripted" | "vision";
 }
 
 export interface CheckoutResult {

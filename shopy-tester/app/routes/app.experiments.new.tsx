@@ -17,7 +17,7 @@ import {
   type EditableField,
 } from "../models/components";
 import { TYPE_LABELS, type ComponentType } from "../models/types";
-import { suggestVariant } from "../models/backend.server";
+import { startCheckout, suggestVariant } from "../models/backend.server";
 import {
   createAndLaunchExperiment,
   createAndLaunchFullTest,
@@ -27,7 +27,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const snapshot = await getLatestSnapshot(session.shop);
   if (!snapshot) {
-    return { hasSnapshot: false, snapshotId: "", selected: null, options: [] };
+    // The purchasing simulation only needs the store URL, so this page must
+    // load even before the store is ingested.
+    return {
+      shop: session.shop,
+      hasSnapshot: false,
+      snapshotId: "",
+      selected: null,
+      options: [],
+    };
   }
 
   const testable = snapshot.components.filter((c) =>
@@ -56,13 +64,36 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
     : null;
 
-  return { hasSnapshot: true, snapshotId: snapshot.id, selected, options };
+  return {
+    shop: session.shop,
+    hasSnapshot: true,
+    snapshotId: snapshot.id,
+    selected,
+    options,
+  };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const form = await request.formData();
   const intent = String(form.get("intent"));
+
+  // Full-store purchasing simulation: only needs a store URL, no snapshot.
+  if (intent === "launch_purchasing") {
+    try {
+      const { jobId } = await startCheckout({
+        storeUrl: String(form.get("storeUrl") || ""),
+        productHandle: String(form.get("productHandle") || "") || undefined,
+        storefrontPassword:
+          String(form.get("storefrontPassword") || "") || undefined,
+        completeOrder: form.get("completeOrder") === "on",
+        engine: form.get("engine") === "vision" ? "vision" : "scripted",
+      });
+      return redirect(`/app/checkout?jobId=${jobId}`);
+    } catch (err) {
+      return { launchError: err instanceof Error ? err.message : String(err) };
+    }
+  }
 
   // Whole-store customer test: no component, no variants.
   if (intent === "launch_full") {
@@ -122,45 +153,48 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function NewExperiment() {
-  const { hasSnapshot, snapshotId, selected, options } =
+  const { shop, hasSnapshot, snapshotId, selected, options } =
     useLoaderData<typeof loader>();
   const submit = useSubmit();
-  const [mode, setMode] = useState<"ab" | "full">("ab");
+  const [mode, setMode] = useState<"ab" | "full" | "purchasing">("ab");
 
-  if (!hasSnapshot) {
-    return (
-      <s-page heading="New simulation">
-        <s-section>
-          <s-banner tone="warning" heading="No store snapshot yet">
-            <s-paragraph>
-              <s-link href="/app/snapshot">Ingest your store</s-link> first to
-              create an experiment.
-            </s-paragraph>
-          </s-banner>
-        </s-section>
-      </s-page>
-    );
-  }
+  const needsSnapshot = mode === "ab" || mode === "full";
 
   return (
     <s-page heading="New simulation">
       <s-section heading="Test type">
         <s-select
-          label="What do you want to simulate?"
+          label="What do you want to run?"
           name="mode"
           value={mode}
           onChange={(e: { currentTarget: { value: string } }) =>
-            setMode(e.currentTarget.value as "ab" | "full")
+            setMode(e.currentTarget.value as "ab" | "full" | "purchasing")
           }
         >
           <s-option value="ab">A/B test — one component, two variants</s-option>
           <s-option value="full">
-            Full-store customer test — whole-store experience
+            Full-store simulation — synthetic shoppers rate the whole store
+          </s-option>
+          <s-option value="purchasing">
+            Full-store purchasing simulation — an agent buys through checkout (no
+            ingestion needed)
           </s-option>
         </s-select>
       </s-section>
 
-      {mode === "full" ? (
+      {mode === "purchasing" ? (
+        <PurchasingLauncher shop={shop} />
+      ) : needsSnapshot && !hasSnapshot ? (
+        <s-section>
+          <s-banner tone="warning" heading="No store snapshot yet">
+            <s-paragraph>
+              <s-link href="/app/snapshot">Ingest your store</s-link> first to run
+              an A/B test or full-store simulation. The{" "}
+              <strong>purchasing simulation</strong> above doesn’t need ingestion.
+            </s-paragraph>
+          </s-banner>
+        </s-section>
+      ) : mode === "full" ? (
         <FullTestLauncher snapshotId={snapshotId} />
       ) : (
         <>
@@ -192,6 +226,79 @@ export default function NewExperiment() {
         </>
       )}
     </s-page>
+  );
+}
+
+function PurchasingLauncher({ shop }: { shop: string }) {
+  const launchFetcher = useFetcher();
+  const launching = launchFetcher.state !== "idle";
+  const launchError = (launchFetcher.data as { launchError?: string } | undefined)
+    ?.launchError;
+
+  return (
+    <s-section heading="Run a full-store purchasing simulation">
+      <s-stack direction="block" gap="base">
+        <s-paragraph>
+          An agent drives a real browser through your storefront → product → cart →
+          checkout and measures friction, stopping before payment. This runs against
+          the live store, so it works even before you ingest. Best on a development
+          store.
+        </s-paragraph>
+        <launchFetcher.Form method="post">
+          <input type="hidden" name="intent" value="launch_purchasing" />
+          <s-stack direction="block" gap="base">
+            <s-select label="Engine" name="engine" value="scripted">
+              <s-option value="scripted">
+                Scripted — fast selector heuristics
+              </s-option>
+              <s-option value="vision">
+                AI vision agent — Claude sees the page and shops it (slower)
+              </s-option>
+            </s-select>
+            <s-text-field
+              label="Store URL"
+              name="storeUrl"
+              defaultValue={`https://${shop}`}
+            />
+            <s-text-field
+              label="Product handle (optional — first product if blank)"
+              name="productHandle"
+              defaultValue=""
+            />
+            <s-text-field
+              label="Storefront password (for password-protected dev stores)"
+              name="storefrontPassword"
+              defaultValue=""
+            />
+            <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input type="checkbox" name="completeOrder" />
+              <s-text>Attempt a test order (dev store + Bogus Gateway only)</s-text>
+            </label>
+            {launchError && (
+              <s-banner tone="critical" heading="Could not start the simulation">
+                {launchError}
+              </s-banner>
+            )}
+            <button
+              type="submit"
+              disabled={launching}
+              style={{
+                padding: "10px 18px",
+                background: launching ? "#a0c4b8" : "#008060",
+                color: "white",
+                border: "none",
+                borderRadius: 8,
+                fontSize: 14,
+                cursor: launching ? "default" : "pointer",
+                width: "fit-content",
+              }}
+            >
+              {launching ? "Starting…" : "Run purchasing simulation"}
+            </button>
+          </s-stack>
+        </launchFetcher.Form>
+      </s-stack>
+    </s-section>
   );
 }
 

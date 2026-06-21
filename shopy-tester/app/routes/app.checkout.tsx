@@ -1,22 +1,16 @@
 import { useEffect } from "react";
-import { redirect } from "react-router";
-import type {
-  ActionFunctionArgs,
-  HeadersFunction,
-  LoaderFunctionArgs,
-} from "react-router";
-import { useFetcher, useLoaderData, useRevalidator } from "react-router";
+import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { useLoaderData, useRevalidator } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import {
   getCheckoutResult,
   getStatus,
-  startCheckout,
   type CheckoutResult,
 } from "../models/backend.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  await authenticate.admin(request);
   const jobId = new URL(request.url).searchParams.get("jobId");
 
   let status: "running" | "completed" | "failed" | null = null;
@@ -34,28 +28,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
-  return { shop: session.shop, jobId, status, result, error };
+  return { jobId, status, result, error };
 };
 
-export const action = async ({ request }: ActionFunctionArgs) => {
-  await authenticate.admin(request);
-  const form = await request.formData();
-  try {
-    const { jobId } = await startCheckout({
-      storeUrl: String(form.get("storeUrl") || ""),
-      productHandle: String(form.get("productHandle") || "") || undefined,
-      storefrontPassword: String(form.get("storefrontPassword") || "") || undefined,
-      completeOrder: form.get("completeOrder") === "on",
-    });
-    return redirect(`/app/checkout?jobId=${jobId}`);
-  } catch (err) {
-    return { startError: err instanceof Error ? err.message : String(err) };
-  }
-};
-
+// Result view for the purchasing simulation. Launching happens from
+// /app/experiments/new (the "New simulation" hub), which redirects here with a
+// ?jobId once a run has started.
 export default function Checkout() {
-  const { shop, jobId, status, result, error } = useLoaderData<typeof loader>();
-  const fetcher = useFetcher<{ startError?: string }>();
+  const { jobId, status, result, error } = useLoaderData<typeof loader>();
   const revalidator = useRevalidator();
 
   useEffect(() => {
@@ -64,77 +44,28 @@ export default function Checkout() {
     return () => clearInterval(t);
   }, [status, revalidator]);
 
-  const starting = fetcher.state !== "idle";
-  const startError = fetcher.data?.startError;
-
   return (
-    <s-page heading="Checkout friction test">
+    <s-page heading="Purchasing simulation">
       <s-button slot="primary-action" href="/app" variant="tertiary">
         Back
       </s-button>
 
-      <s-section heading="Run a real checkout">
-        <s-stack direction="block" gap="base">
-          <s-paragraph>
-            Drives a real headless browser through your storefront → product → cart →
-            checkout and measures friction: per-step load times, whether add-to-cart and
-            checkout work, forced account creation, missing express checkout, and more.
-            Works best on a development store (handles the storefront password).
-          </s-paragraph>
-          <fetcher.Form method="post">
-            <s-stack direction="block" gap="base">
-              <s-text-field
-                label="Store URL"
-                name="storeUrl"
-                defaultValue={`https://${shop}`}
-              />
-              <s-text-field
-                label="Product handle (optional — first product if blank)"
-                name="productHandle"
-                defaultValue=""
-              />
-              <s-text-field
-                label="Storefront password (for password-protected dev stores)"
-                name="storefrontPassword"
-                defaultValue=""
-              />
-              <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input type="checkbox" name="completeOrder" />
-                <s-text>Attempt a test order (dev store + Bogus Gateway only)</s-text>
-              </label>
-              {startError && (
-                <s-banner tone="critical" heading="Could not start the run">
-                  {startError}
-                </s-banner>
-              )}
-              <button
-                type="submit"
-                disabled={starting}
-                style={{
-                  padding: "10px 18px",
-                  background: starting ? "#a0c4b8" : "#008060",
-                  color: "white",
-                  border: "none",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  cursor: starting ? "default" : "pointer",
-                  width: "fit-content",
-                }}
-              >
-                {starting ? "Starting…" : "Run checkout test"}
-              </button>
-            </s-stack>
-          </fetcher.Form>
-        </s-stack>
-      </s-section>
-
-      {jobId && (
+      {!jobId ? (
+        <s-section>
+          <s-banner tone="info" heading="No run yet">
+            <s-paragraph>
+              Start a purchasing simulation from{" "}
+              <s-link href="/app/experiments/new">New simulation</s-link>.
+            </s-paragraph>
+          </s-banner>
+        </s-section>
+      ) : (
         <s-section heading="Result">
           {status === "running" && (
             <s-stack direction="inline" gap="base" alignItems="center">
               <s-spinner size="base" accessibilityLabel="Running" />
               <s-text color="subdued">
-                Driving the browser through checkout… this can take up to a minute.
+                Driving the browser through checkout… this can take a minute.
               </s-text>
             </s-stack>
           )}
