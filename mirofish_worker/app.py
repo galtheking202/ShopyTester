@@ -24,11 +24,18 @@ try:
 except ImportError:
     pass
 
-from runner import Settings, run_experiment  # noqa: E402
+import runner  # noqa: E402
+import swarm  # noqa: E402
+from runner import Settings  # noqa: E402
 from suggest import suggest_variant  # noqa: E402
 
 app = FastAPI(title="mirofish_worker")
 settings = Settings()
+
+# Simulation engine: "swarm" (custom shopper-agent orchestration) or "mirofish"
+# (legacy OASIS CLI, kept as an instant rollback). Defaults to swarm.
+SHOPSIM_ENGINE = os.getenv("SHOPSIM_ENGINE", "swarm")
+_run_experiment = swarm.run_experiment if SHOPSIM_ENGINE == "swarm" else runner.run_experiment
 
 # Shared-secret guard. When BACKEND_SECRET is set, every protected route requires
 # a matching `X-ShopSim-Auth` header (the Shopify app sends it). When unset (e.g.
@@ -54,11 +61,14 @@ _lock = threading.Lock()
 
 class RunRequest(BaseModel):
     shopContext: str
-    variantA: str
-    variantB: str
+    # Variants are required for "ab" mode; unused (and optional) for "full".
+    variantA: str = ""
+    variantB: str = ""
     requirement: str = ""
     componentType: str = "component"
     audienceBrief: dict | None = None
+    # "ab" = score two variants of one component; "full" = whole-store audit.
+    mode: str = "ab"
 
 
 class SuggestRequest(BaseModel):
@@ -93,7 +103,7 @@ def _get(job_id: str) -> dict | None:
 
 def _execute(job_id: str, payload: dict) -> None:
     try:
-        result = run_experiment(job_id, payload, settings)
+        result = _run_experiment(job_id, payload, settings)
         rp = _result_path(job_id)
         rp.parent.mkdir(parents=True, exist_ok=True)
         rp.write_text(json.dumps(result), encoding="utf-8")
@@ -104,7 +114,7 @@ def _execute(job_id: str, payload: dict) -> None:
 
 @app.get("/health")
 def health() -> dict:
-    return {"ok": True, "mock": settings.mock, "provider": settings.provider}
+    return {"ok": True, "mock": settings.mock, "provider": settings.provider, "engine": SHOPSIM_ENGINE}
 
 
 @app.post("/run", dependencies=guard)

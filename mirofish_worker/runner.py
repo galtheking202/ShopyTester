@@ -35,6 +35,21 @@ class Settings:
     # Per-variant subprocess timeout in seconds (each A/B test runs this twice).
     timeout: int = int(os.getenv("MIROFISH_TIMEOUT", "1800"))
 
+    # --- swarm engine (swarm.py) knobs ---------------------------------------
+    # Full-store mode allocates AGENTS_PER_PRODUCT agents to each product, capped
+    # at MAX_EASY_AGENT total. A/B mode uses AB_AGENT_COUNT agents (paired).
+    agents_per_product: int = int(os.getenv("AGENTS_PER_PRODUCT", "10"))
+    max_easy_agent: int = int(os.getenv("MAX_EASY_AGENT", "100"))
+    ab_agent_count: int = int(os.getenv("AB_AGENT_COUNT", "10"))
+    # Max simultaneous Gemini calls across the whole run.
+    easy_concurrency: int = int(os.getenv("EASY_CONCURRENCY", "12"))
+    # Heavy model grasps the store / designs personas / writes the report;
+    # the cheap model powers the parallel easy-agent swarm.
+    boss_model: str = os.getenv("BOSS_MODEL", "gemini-2.5-pro")
+    easy_model: str = os.getenv("EASY_MODEL", "gemini-2.5-flash")
+    # Global per-run wall-clock budget for a swarm run (seconds).
+    swarm_timeout: int = int(os.getenv("SWARM_TIMEOUT", "900"))
+
 
 # Numeric verdict fields we know how to interpret, best first.
 SCORE_KEYS = re.compile(

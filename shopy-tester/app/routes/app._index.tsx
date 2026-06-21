@@ -22,6 +22,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     select: {
       id: true,
       name: true,
+      mode: true,
       componentType: true,
       status: true,
       winner: true,
@@ -105,7 +106,9 @@ export default function Index() {
                       <s-text type="strong">{exp.name}</s-text>
                     </s-link>
                     <s-text color="subdued">
-                      {exp.componentType}
+                      {exp.mode === "full"
+                        ? "Full-store customer test"
+                        : exp.componentType}
                       {exp.winner ? ` · winner: Variant ${exp.winner}` : ""}
                     </s-text>
                   </s-stack>

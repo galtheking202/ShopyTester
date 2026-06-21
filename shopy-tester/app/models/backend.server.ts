@@ -10,21 +10,53 @@ const BASE =
 
 export interface RunPayload {
   shopContext: string;
-  variantA: string;
-  variantB: string;
+  // "ab" = score two component variants; "full" = whole-store audit.
+  mode: "ab" | "full";
+  // Required for "ab"; omitted for "full".
+  variantA?: string;
+  variantB?: string;
   requirement: string;
   componentType: string;
   // Structured store-customer brief; the backend turns it into shopper personas.
   audienceBrief?: unknown;
 }
 
-export interface MirofishResult {
+// A `type` (not `interface`) so it gets an implicit index signature and stays
+// assignable to Prisma's Json input type.
+export type Svg = {
+  name: string;
+  dataUri: string;
+};
+
+// Result of an "ab" run (single component, two variants).
+export interface AbResult {
   winner: "A" | "B";
   confidence: number;
   scoreA: number;
   scoreB: number;
   reportMarkdown: string;
-  svgs: { name: string; dataUri: string }[];
+  svgs: Svg[];
+}
+
+// Result of a "full" run (whole-store customer-experience audit).
+export interface FullResult {
+  mode: "full";
+  storeScore: number;
+  summaryMarkdown: string;
+  products: {
+    title: string;
+    score: number;
+    topObjections: string[];
+    highlight: string;
+  }[];
+  reviews: { persona: string; rating: number; text: string }[];
+  svgs: Svg[];
+}
+
+export type RunResult = AbResult | FullResult;
+
+export function isFullResult(r: RunResult): r is FullResult {
+  return (r as FullResult).mode === "full";
 }
 
 // Shared secret sent to the backend (must match its BACKEND_SECRET). Lets the
@@ -79,7 +111,7 @@ export async function getStatus(
   };
 }
 
-export function getResult(jobId: string): Promise<MirofishResult> {
+export function getResult(jobId: string): Promise<RunResult> {
   return call(`/result/${jobId}`);
 }
 

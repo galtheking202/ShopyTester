@@ -18,7 +18,10 @@ import {
 } from "../models/components";
 import { TYPE_LABELS, type ComponentType } from "../models/types";
 import { suggestVariant } from "../models/backend.server";
-import { createAndLaunchExperiment } from "../models/experiment.server";
+import {
+  createAndLaunchExperiment,
+  createAndLaunchFullTest,
+} from "../models/experiment.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -60,6 +63,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const form = await request.formData();
   const intent = String(form.get("intent"));
+
+  // Whole-store customer test: no component, no variants.
+  if (intent === "launch_full") {
+    try {
+      const exp = await createAndLaunchFullTest({
+        shop: session.shop,
+        snapshotId: String(form.get("snapshotId")),
+        name: String(form.get("name") || "Full-store customer test"),
+      });
+      return redirect(`/app/experiments/${exp.id}`);
+    } catch (err) {
+      return { launchError: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
   const componentId = String(form.get("componentId"));
 
   const component = await prisma.component.findUniqueOrThrow({
@@ -107,10 +125,11 @@ export default function NewExperiment() {
   const { hasSnapshot, snapshotId, selected, options } =
     useLoaderData<typeof loader>();
   const submit = useSubmit();
+  const [mode, setMode] = useState<"ab" | "full">("ab");
 
   if (!hasSnapshot) {
     return (
-      <s-page heading="New A/B test">
+      <s-page heading="New simulation">
         <s-section>
           <s-banner tone="warning" heading="No store snapshot yet">
             <s-paragraph>
@@ -124,29 +143,107 @@ export default function NewExperiment() {
   }
 
   return (
-    <s-page heading="New A/B test">
-      <s-section heading="1. Choose a component to test">
+    <s-page heading="New simulation">
+      <s-section heading="Test type">
         <s-select
-          label="Component"
-          name="componentId"
-          placeholder="Select a component…"
-          value={selected?.id ?? ""}
-          onChange={(e: any) =>
-            submit({ componentId: e.currentTarget.value }, { method: "get" })
+          label="What do you want to simulate?"
+          name="mode"
+          value={mode}
+          onChange={(e: { currentTarget: { value: string } }) =>
+            setMode(e.currentTarget.value as "ab" | "full")
           }
         >
-          {options.map((o) => (
-            <s-option key={o.value} value={o.value}>
-              {o.label}
-            </s-option>
-          ))}
+          <s-option value="ab">A/B test — one component, two variants</s-option>
+          <s-option value="full">
+            Full-store customer test — whole-store experience
+          </s-option>
         </s-select>
       </s-section>
 
-      {selected && (
-        <VariantEditor key={selected.id} snapshotId={snapshotId} selected={selected} />
+      {mode === "full" ? (
+        <FullTestLauncher snapshotId={snapshotId} />
+      ) : (
+        <>
+          <s-section heading="1. Choose a component to test">
+            <s-select
+              label="Component"
+              name="componentId"
+              placeholder="Select a component…"
+              value={selected?.id ?? ""}
+              onChange={(e: { currentTarget: { value: string } }) =>
+                submit({ componentId: e.currentTarget.value }, { method: "get" })
+              }
+            >
+              {options.map((o) => (
+                <s-option key={o.value} value={o.value}>
+                  {o.label}
+                </s-option>
+              ))}
+            </s-select>
+          </s-section>
+
+          {selected && (
+            <VariantEditor
+              key={selected.id}
+              snapshotId={snapshotId}
+              selected={selected}
+            />
+          )}
+        </>
       )}
     </s-page>
+  );
+}
+
+function FullTestLauncher({ snapshotId }: { snapshotId: string }) {
+  const launchFetcher = useFetcher();
+  const launching = launchFetcher.state !== "idle";
+  const launchError = (launchFetcher.data as { launchError?: string } | undefined)
+    ?.launchError;
+
+  return (
+    <s-section heading="Run a full-store customer test">
+      <s-stack direction="block" gap="base">
+        <s-paragraph>
+          A heavy “boss” agent studies your whole store and designs realistic buyer
+          segments, then a swarm of shopper agents (10 per product) browse, decide
+          whether to buy, and leave reviews. You get an overall store score, a
+          per-product breakdown, top objections, and synthetic reviews.
+        </s-paragraph>
+        <launchFetcher.Form method="post">
+          <input type="hidden" name="intent" value="launch_full" />
+          <input type="hidden" name="snapshotId" value={snapshotId} />
+          <s-stack direction="block" gap="base">
+            <s-text-field
+              label="Test name"
+              name="name"
+              defaultValue="Full-store customer test"
+            />
+            {launchError && (
+              <s-banner tone="critical" heading="Could not start the test">
+                {launchError}
+              </s-banner>
+            )}
+            <button
+              type="submit"
+              disabled={launching}
+              style={{
+                padding: "10px 18px",
+                background: launching ? "#a0c4b8" : "#008060",
+                color: "white",
+                border: "none",
+                borderRadius: 8,
+                fontSize: 14,
+                cursor: launching ? "default" : "pointer",
+                width: "fit-content",
+              }}
+            >
+              {launching ? "Starting…" : "Run full-store test"}
+            </button>
+          </s-stack>
+        </launchFetcher.Form>
+      </s-stack>
+    </s-section>
   );
 }
 
