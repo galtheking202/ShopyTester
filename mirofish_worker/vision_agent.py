@@ -6,7 +6,7 @@ viewport, returns a computer-use action (click at [x,y], type, scroll, …), we
 execute it with Playwright, screenshot again, and loop. The model narrates the
 UX friction it notices as a first-time shopper.
 
-Two providers, selected per run via `visionProvider` ("claude" default | "gemini"):
+Two providers, selected by the VISION_PROVIDER env var ("claude" default | "gemini"):
   * Claude — `computer_20251124` tool, beta `computer-use-2025-11-24`,
     `claude-opus-4-8`, pixel coordinates (`_run_claude`).
   * Gemini — `ComputerUse(ENVIRONMENT_BROWSER)` tool,
@@ -579,5 +579,6 @@ def run_vision_checkout(job_id: str, payload: dict, settings: Settings | None = 
     settings = settings or Settings()
     if settings.mock:
         return _mock(payload)
-    provider = (payload.get("visionProvider") or settings.vision_provider or "claude").lower()
+    # Provider is set by the VISION_PROVIDER env var only (no per-run override).
+    provider = (settings.vision_provider or "claude").lower()
     return _run_gemini(payload, settings) if provider == "gemini" else _run_claude(payload, settings)

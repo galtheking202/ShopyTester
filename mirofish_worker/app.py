@@ -85,10 +85,9 @@ class CheckoutRequest(BaseModel):
     storefrontPassword: str | None = None
     completeOrder: bool = False
     # "scripted" = selector heuristics (checkout_sim); "vision" = computer-use
-    # agent driving the browser (vision_agent).
+    # agent driving the browser (vision_agent). The vision provider (claude/gemini)
+    # is configured by the VISION_PROVIDER env var, not per request.
     engine: str = "scripted"
-    # For engine="vision": "claude" (default) or "gemini".
-    visionProvider: str | None = None
 
 
 def _result_path(job_id: str) -> Path:

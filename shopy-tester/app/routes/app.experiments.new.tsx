@@ -88,8 +88,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           String(form.get("storefrontPassword") || "") || undefined,
         completeOrder: form.get("completeOrder") === "on",
         engine: form.get("engine") === "vision" ? "vision" : "scripted",
-        visionProvider:
-          form.get("visionProvider") === "gemini" ? "gemini" : "claude",
       });
       return redirect(`/app/checkout?jobId=${jobId}`);
     } catch (err) {
@@ -256,10 +254,6 @@ function PurchasingLauncher({ shop }: { shop: string }) {
               <s-option value="vision">
                 AI vision agent — the model sees the page and shops it (slower)
               </s-option>
-            </s-select>
-            <s-select label="Vision model (vision engine only)" name="visionProvider" value="claude">
-              <s-option value="claude">Claude (computer use)</s-option>
-              <s-option value="gemini">Gemini (computer use)</s-option>
             </s-select>
             <s-text-field
               label="Store URL"

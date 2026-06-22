@@ -79,8 +79,8 @@ class Settings:
     storefront_password: str = field(default_factory=lambda: os.getenv("STOREFRONT_PASSWORD", ""))
 
     # --- vision agent (vision_agent.py, browser computer-use) ----------------
-    # Provider for the vision agent: "claude" (default) or "gemini". Per-run
-    # overridable via the request's visionProvider field.
+    # Provider for the vision agent, set ONLY by VISION_PROVIDER:
+    # "claude" (default) or "gemini".
     vision_provider: str = field(default_factory=lambda: os.getenv("VISION_PROVIDER", "claude"))
     vision_model: str = field(default_factory=lambda: os.getenv("VISION_MODEL", "claude-opus-4-8"))
     gemini_vision_model: str = field(

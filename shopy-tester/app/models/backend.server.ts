@@ -66,10 +66,9 @@ export interface CheckoutPayload {
   productHandle?: string;
   storefrontPassword?: string;
   completeOrder?: boolean;
-  // "scripted" = selector heuristics; "vision" = computer-use agent.
+  // "scripted" = selector heuristics; "vision" = computer-use agent. The vision
+  // provider (Claude/Gemini) is set by the worker's VISION_PROVIDER env var.
   engine?: "scripted" | "vision";
-  // For engine "vision": which computer-use model drives the browser.
-  visionProvider?: "claude" | "gemini";
 }
 
 export interface CheckoutResult {
