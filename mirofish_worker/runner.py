@@ -68,6 +68,13 @@ class Settings:
     checkout_screenshots: bool = field(
         default_factory=lambda: os.getenv("CHECKOUT_SCREENSHOTS", "1") in ("1", "true", "True")
     )
+    # After a state-changing action, the vision agent waits for the page to
+    # settle (network idle, bounded by *_TIMEOUT_MS) plus a fixed *_MS pause,
+    # so screenshots reflect the loaded page instead of a mid-load flash.
+    checkout_settle_ms: int = field(default_factory=lambda: int(os.getenv("CHECKOUT_SETTLE_MS", "1200")))
+    checkout_settle_timeout_ms: int = field(
+        default_factory=lambda: int(os.getenv("CHECKOUT_SETTLE_TIMEOUT_MS", "6000"))
+    )
     # Default storefront password for password-protected dev stores.
     storefront_password: str = field(default_factory=lambda: os.getenv("STOREFRONT_PASSWORD", ""))
 

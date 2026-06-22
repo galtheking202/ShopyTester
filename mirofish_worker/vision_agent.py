@@ -41,6 +41,11 @@ _SYSTEM = (
     "- Do NOT log in or create an account with real credentials.\n"
     "- Stop as soon as you reach the payment/credit-card step.\n\n"
     "Work in small steps. After each action take a screenshot and check the result. "
+    "Pages can take a moment to load: after an action, wait briefly and take a FRESH "
+    "screenshot before drawing any conclusion. If a page looks blank, half-loaded, or "
+    "like nothing happened, take another screenshot (or use the wait action) before "
+    "deciding — do not assume an action failed or the store is broken just because the "
+    "first screenshot looks empty.\n"
     "As you go, narrate the friction a real shopper would hit: slow or broken steps, "
     "confusing layout, hard-to-find buttons, unexpected or excessive steps, forced "
     "account creation, missing trust signals, unclear shipping cost or returns. "
@@ -71,10 +76,28 @@ def _origin(url: str) -> str:
 class BrowserComputer:
     """Executes computer-use actions against a Playwright page."""
 
-    def __init__(self, page, width: int, height: int):
+    def __init__(self, page, width: int, height: int, settle_ms: int, settle_timeout_ms: int):
         self.page = page
         self.width = width
         self.height = height
+        self.settle_ms = settle_ms
+        self.settle_timeout_ms = settle_timeout_ms
+
+    def _wait_idle(self) -> None:
+        try:
+            self.page.wait_for_load_state("networkidle", timeout=self.settle_timeout_ms)
+        except Exception:  # noqa: BLE001 - long-poll/analytics pages never go idle
+            pass
+
+    def settle(self) -> None:
+        """After a state-changing action, let the page finish loading so the
+        NEXT screenshot reflects the loaded page, not a mid-load flash."""
+        self._wait_idle()
+        if self.settle_ms:
+            try:
+                self.page.wait_for_timeout(self.settle_ms)
+            except Exception:  # noqa: BLE001
+                pass
 
     def screenshot_b64(self) -> str:
         raw = self.page.screenshot(type="png")
@@ -93,15 +116,20 @@ class BrowserComputer:
         x, y = int(coord[0]), int(coord[1])
         text = params.get("text")
         if action == "screenshot":
+            # Make sure the page has loaded before we capture it.
+            self._wait_idle()
             return {"image": self.screenshot_b64()}
         if action == "left_click":
             self._click(x, y, text, button="left")
+            self.settle()
             return f"clicked ({x}, {y})"
         if action in ("right_click", "middle_click"):
             self._click(x, y, text, button=action.split("_")[0])
+            self.settle()
             return f"{action} ({x}, {y})"
         if action == "double_click":
             self.page.mouse.dblclick(x, y)
+            self.settle()
             return f"double-clicked ({x}, {y})"
         if action == "mouse_move":
             self.page.mouse.move(x, y)
@@ -111,6 +139,7 @@ class BrowserComputer:
             return f"typed {len(text or '')} chars"
         if action == "key":
             self.page.keyboard.press(self._key(text or ""))
+            self.settle()  # Enter/submit often navigates
             return f"pressed {text}"
         if action == "scroll":
             self.page.mouse.move(x, y)
@@ -126,6 +155,7 @@ class BrowserComputer:
             elif direction == "left":
                 dx = -amount
             self.page.mouse.wheel(dx, dy)
+            self.settle()  # lazy-loaded content / infinite scroll
             return f"scrolled {direction}"
         if action == "wait":
             self.page.wait_for_timeout(int(float(params.get("duration", 1)) * 1000))
@@ -136,6 +166,7 @@ class BrowserComputer:
             self.page.mouse.down()
             self.page.mouse.move(x, y)
             self.page.mouse.up()
+            self.settle()
             return "dragged"
         return f"unsupported action: {action}"
 
@@ -237,13 +268,16 @@ def _run(payload: dict, settings: Settings) -> dict:
         context = browser.new_context(viewport={"width": w, "height": h})
         context.set_default_timeout(settings.checkout_nav_timeout)
         page = context.new_page()
+        computer = BrowserComputer(
+            page, w, h, settings.checkout_settle_ms, settings.checkout_settle_timeout_ms
+        )
         try:
             page.goto(store_url, wait_until="domcontentloaded",
                       timeout=settings.checkout_nav_timeout)
+            computer.settle()  # let the storefront finish before the first screenshot
         except Exception as err:  # noqa: BLE001
             narration_parts.append(f"Could not open the storefront: {str(err)[:160]}")
 
-        computer = BrowserComputer(page, w, h)
         tools = [{"type": _TOOL_TYPE, "name": "computer",
                   "display_width_px": w, "display_height_px": h, "display_number": 1}]
         messages: list[dict] = [{
