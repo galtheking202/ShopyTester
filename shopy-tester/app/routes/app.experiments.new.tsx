@@ -244,6 +244,14 @@ function PurchasingLauncher({ shop }: { shop: string }) {
           the live store, so it works even before you ingest. Best on a development
           store.
         </s-paragraph>
+        <s-paragraph>
+          <s-text color="subdued">
+            You can also run this outside Shopify:{" "}
+            <s-link href="/tester" target="_blank">
+              open the standalone tester ↗
+            </s-link>
+          </s-text>
+        </s-paragraph>
         <launchFetcher.Form method="post">
           <input type="hidden" name="intent" value="launch_purchasing" />
           <s-stack direction="block" gap="base">
