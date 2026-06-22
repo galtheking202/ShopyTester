@@ -78,10 +78,16 @@ class Settings:
     # Default storefront password for password-protected dev stores.
     storefront_password: str = field(default_factory=lambda: os.getenv("STOREFRONT_PASSWORD", ""))
 
-    # --- vision agent (vision_agent.py, Claude computer-use) -----------------
+    # --- vision agent (vision_agent.py, browser computer-use) ----------------
+    # Provider for the vision agent: "claude" (default) or "gemini". Per-run
+    # overridable via the request's visionProvider field.
+    vision_provider: str = field(default_factory=lambda: os.getenv("VISION_PROVIDER", "claude"))
     vision_model: str = field(default_factory=lambda: os.getenv("VISION_MODEL", "claude-opus-4-8"))
+    gemini_vision_model: str = field(
+        default_factory=lambda: os.getenv("GEMINI_VISION_MODEL", "gemini-2.5-computer-use-preview-10-2025")
+    )
     vision_max_steps: int = field(default_factory=lambda: int(os.getenv("VISION_MAX_STEPS", "20")))
-    # Viewport kept within Claude's image limits so coordinates map 1:1.
+    # Viewport kept within the model's image limits so coordinates map cleanly.
     vision_viewport_w: int = field(default_factory=lambda: int(os.getenv("VISION_VIEWPORT_W", "1280")))
     vision_viewport_h: int = field(default_factory=lambda: int(os.getenv("VISION_VIEWPORT_H", "800")))
 
